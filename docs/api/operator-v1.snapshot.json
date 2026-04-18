@@ -1,0 +1,300 @@
+{
+  "version": "v1",
+  "summary": "Stable operator contract for runtime OS, AMOS memory OS, and software control fabric.",
+  "http": {
+    "base_prefix": "/v1",
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/v1/service/api-contract",
+        "summary": "Return the stable operator API contract.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/reports/system",
+        "summary": "Return the unified system report with runtime, AMOS, and software-control sections.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/reports/metrics",
+        "summary": "Return compact observability and operator metrics across runtime, AMOS, maintenance, and software control.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/reports/metrics/history",
+        "summary": "Return persisted observability metric history and trend summaries.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/metrics",
+        "summary": "Return Prometheus-compatible operator metrics exported from SQLite-authoritative snapshots.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/reports/maintenance",
+        "summary": "Return resident maintenance daemon, incident, lease, and recommendation state.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/reports/software-control",
+        "summary": "Return governed software-control manifests, action receipts, replay records, and failure patterns.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory",
+        "summary": "Return the detailed memory state for one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory/kernel",
+        "summary": "Return the unified AMOS kernel state for one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tasks/{task_id}/memory/evidence-pack",
+        "summary": "Assemble an evidence pack for a memory query.",
+        "scopes": [
+          "operator"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory/timeline",
+        "summary": "Return timeline reconstruction segments for one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory/project-state",
+        "summary": "Return reconstructed project state for one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory/policy",
+        "summary": "Return AMOS memory policy and rollout state for one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory/maintenance-mode",
+        "summary": "Return maintenance mode and active degradation reasons for one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory/maintenance-workers",
+        "summary": "Return maintenance worker state visible to one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tasks/{task_id}/memory/maintenance-daemon",
+        "summary": "Return resident maintenance daemon and lease state for one task scope.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tasks/{task_id}/memory/maintenance-workers/register",
+        "summary": "Register a maintenance worker for resident maintenance cycles.",
+        "scopes": [
+          "runtime-admin"
+        ],
+        "sensitive": true
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tasks/{task_id}/memory/maintenance-workers/daemon",
+        "summary": "Run one or more resident maintenance daemon cycles for a worker.",
+        "scopes": [
+          "runtime-admin"
+        ],
+        "sensitive": true
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tasks/{task_id}/memory/maintenance-promotions/{recommendation_id}/apply",
+        "summary": "Apply a maintenance controller promotion.",
+        "scopes": [
+          "runtime-admin"
+        ],
+        "sensitive": true
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tasks/{task_id}/memory/maintenance-rollouts/{rollout_id}/rollback",
+        "summary": "Rollback a maintenance rollout.",
+        "scopes": [
+          "runtime-admin"
+        ],
+        "sensitive": true
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tasks/{task_id}/memory/selective-purge",
+        "summary": "Run selective purge on derived memory layers.",
+        "scopes": [
+          "operator"
+        ],
+        "sensitive": true
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tasks/{task_id}/memory/hard-purge",
+        "summary": "Run hard purge over AMOS-managed durable layers.",
+        "scopes": [
+          "operator"
+        ],
+        "sensitive": true
+      },
+      {
+        "method": "GET",
+        "path": "/v1/software/harnesses",
+        "summary": "List governed software harnesses and bridge state.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/software/harnesses/{harness_id}/manifest",
+        "summary": "Return the stable manifest for one software harness.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/software/harnesses/{harness_id}/report",
+        "summary": "Return manifest, macros, replay diagnostics, and recovery hints for one harness.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/software/failure-clusters",
+        "summary": "Return operator-visible clusters of repeated software failures.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/software/recovery-hints",
+        "summary": "Return recovery hints distilled from governed software traces.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "GET",
+        "path": "/v1/software/action-receipts",
+        "summary": "Return governed software action receipts, replay records, and failure patterns.",
+        "scopes": [
+          "viewer"
+        ],
+        "sensitive": false
+      },
+      {
+        "method": "POST",
+        "path": "/v1/software/harnesses/{harness_id}/invoke",
+        "summary": "Invoke a governed software harness command.",
+        "scopes": [
+          "operator"
+        ],
+        "sensitive": true
+      },
+      {
+        "method": "POST",
+        "path": "/v1/software/harnesses/{harness_id}/macros/{macro_id}/invoke",
+        "summary": "Invoke a governed software automation macro.",
+        "scopes": [
+          "operator"
+        ],
+        "sensitive": true
+      }
+    ]
+  },
+  "cli": {
+    "binary": "ceos",
+    "commands": [
+      "system-report",
+      "metrics-report",
+      "maintenance-report",
+      "service-health",
+      "api-contract",
+      "memory-kernel-state",
+      "memory-evidence-pack",
+      "memory-timeline",
+      "memory-project-state",
+      "memory-policy-state",
+      "memory-maintenance-mode",
+      "memory-maintenance-workers",
+      "software-harnesses",
+      "software-harness-manifest",
+      "software-action-receipts",
+      "software-control-report"
+    ]
+  }
+}

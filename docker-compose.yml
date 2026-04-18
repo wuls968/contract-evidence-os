@@ -1,0 +1,119 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ceos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+  ceos:
+    build: .
+    volumes:
+      - .:/app
+    command: ["--help"]
+  ceos-server:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      CEOS_STORAGE_ROOT: /app/runtime
+      CEOS_OPERATOR_TOKEN: dev-token
+      CEOS_EXTERNAL_BACKEND_KIND: redis
+      CEOS_EXTERNAL_BACKEND_URL: redis://redis:6379/0
+      CEOS_SHARED_STATE_BACKEND_KIND: postgres
+      CEOS_SHARED_STATE_BACKEND_URL: postgresql://postgres:postgres@postgres:5432/ceos
+      CEOS_TRUST_MODE: hmac
+    entrypoint: ["ceos-server"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+  ceos-dispatcher:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      CEOS_STORAGE_ROOT: /app/runtime
+      CEOS_EXTERNAL_BACKEND_KIND: redis
+      CEOS_EXTERNAL_BACKEND_URL: redis://redis:6379/0
+      CEOS_SHARED_STATE_BACKEND_KIND: postgres
+      CEOS_SHARED_STATE_BACKEND_URL: postgresql://postgres:postgres@postgres:5432/ceos
+      CEOS_TRUST_MODE: hmac
+    entrypoint: ["ceos-dispatcher", "--reclaim-stale-workers"]
+    depends_on:
+      - postgres
+      - redis
+  ceos-worker-1:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      CEOS_STORAGE_ROOT: /app/runtime
+      CEOS_WORKER_ID: worker-1
+      CEOS_HOST_ID: host-a
+      CEOS_EXTERNAL_BACKEND_KIND: redis
+      CEOS_EXTERNAL_BACKEND_URL: redis://redis:6379/0
+      CEOS_SHARED_STATE_BACKEND_KIND: postgres
+      CEOS_SHARED_STATE_BACKEND_URL: postgresql://postgres:postgres@postgres:5432/ceos
+      CEOS_TRUST_MODE: hmac
+    entrypoint: ["ceos-worker", "--iterations", "2"]
+    depends_on:
+      - postgres
+      - redis
+  ceos-worker-2:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      CEOS_STORAGE_ROOT: /app/runtime
+      CEOS_WORKER_ID: worker-2
+      CEOS_HOST_ID: host-b
+      CEOS_EXTERNAL_BACKEND_KIND: redis
+      CEOS_EXTERNAL_BACKEND_URL: redis://redis:6379/0
+      CEOS_SHARED_STATE_BACKEND_KIND: postgres
+      CEOS_SHARED_STATE_BACKEND_URL: postgresql://postgres:postgres@postgres:5432/ceos
+      CEOS_TRUST_MODE: hmac
+    entrypoint: ["ceos-worker", "--iterations", "2"]
+    depends_on:
+      - postgres
+      - redis
+  ceos-maintenance:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      CEOS_STORAGE_ROOT: /app/runtime
+      CEOS_EXTERNAL_BACKEND_KIND: redis
+      CEOS_EXTERNAL_BACKEND_URL: redis://redis:6379/0
+      CEOS_SHARED_STATE_BACKEND_KIND: postgres
+      CEOS_SHARED_STATE_BACKEND_URL: postgresql://postgres:postgres@postgres:5432/ceos
+      CEOS_TRUST_MODE: hmac
+    entrypoint: ["ceos-maintenance", "--restart-recovery"]
+    depends_on:
+      - postgres
+      - redis
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    profiles: ["observability"]
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - ceos-server
+  grafana:
+    image: grafana/grafana:11.1.0
+    profiles: ["observability"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./deploy/observability/grafana-dashboard.json:/var/lib/grafana/dashboards/ceos-operator.json:ro
+    depends_on:
+      - prometheus

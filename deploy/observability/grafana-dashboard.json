@@ -1,0 +1,33 @@
+{
+  "title": "Contract-Evidence OS Operator Metrics",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Maintenance Incidents",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "ceos_maintenance_incident_count"}]
+    },
+    {
+      "type": "stat",
+      "title": "Repair Backlog",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "ceos_repair_backlog_count"}]
+    },
+    {
+      "type": "stat",
+      "title": "Software Action Receipts",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "ceos_software_action_receipt_count"}]
+    },
+    {
+      "type": "stat",
+      "title": "Observability Snapshots",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "ceos_observability_snapshot_count"}]
+    }
+  ]
+}

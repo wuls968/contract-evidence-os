@@ -1,0 +1,16 @@
+{
+  "task_id": "task-demo-001",
+  "goal": "Read the attached requirements note and summarize the mandatory constraints with evidence.",
+  "attachments": [
+    {
+      "kind": "file",
+      "path": "examples/sample_requirements.txt"
+    }
+  ],
+  "preferences": {
+    "output_style": "structured"
+  },
+  "prohibitions": [
+    "Do not delete audit history."
+  ]
+}

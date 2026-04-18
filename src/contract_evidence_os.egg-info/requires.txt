@@ -1,0 +1,10 @@
+redis>=7.4.0
+
+[dev]
+build>=1.2.2
+pytest>=9.0.0
+pytest-cov>=6.2.1
+fakeredis>=2.35.1
+
+[postgres]
+psycopg[binary]>=3.2.9

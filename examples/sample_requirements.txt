@@ -1,0 +1,3 @@
+Audit history must never be deleted.
+Every important summary must cite evidence.
+Destructive actions require explicit approval.

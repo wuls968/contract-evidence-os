@@ -1,0 +1,9 @@
+usage: ceos [-h] [--storage-root STORAGE_ROOT] [--config CONFIG] COMMAND ...
+
+positional arguments:
+  {create-task,inspect-task,resume-task,checkpoint-task,replay-task,query-audit,query-evidence,query-memory,inspect-handoff,inspect-open-questions,inspect-next-actions,decide-approval,propose-evolution,evaluate-candidate,rollback-candidate,run-eval,system-report,metrics-report,maintenance-report,service-health,api-contract,memory-kernel-state,memory-evidence-pack,memory-timeline,memory-project-state,memory-policy-state,memory-maintenance-mode,memory-maintenance-workers,software-harnesses,software-harness-manifest,software-action-receipts,software-control-report}
+
+options:
+  -h, --help            show this help message and exit
+  --storage-root STORAGE_ROOT
+  --config CONFIG

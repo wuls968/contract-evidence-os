@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.contractevidenceos.maintenance</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>ceos-maintenance</string>
+      <string>--daemon</string>
+      <string>--poll-interval-seconds</string>
+      <string>30</string>
+      <string>--heartbeat-seconds</string>
+      <string>30</string>
+      <string>--lease-seconds</string>
+      <string>300</string>
+      <string>--max-cycles</string>
+      <string>999999</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ceos-maintenance.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ceos-maintenance.err</string>
+  </dict>
+</plist>

@@ -1,0 +1,6 @@
+[console_scripts]
+ceos = contract_evidence_os.api.cli:main
+ceos-dispatcher = contract_evidence_os.api.dispatcher_main:main
+ceos-maintenance = contract_evidence_os.api.maintenance_main:main
+ceos-server = contract_evidence_os.api.server_main:main
+ceos-worker = contract_evidence_os.api.worker_main:main

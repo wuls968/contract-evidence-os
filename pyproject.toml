@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contract-evidence-os"
+version = "0.9.0"
+description = "Auditable AI agent operating system with long-term memory and governed desktop automation"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+  { name = "OpenAI Codex" }
+]
+keywords = [
+  "auditable ai agent",
+  "agent operating system",
+  "long-term memory agent",
+  "desktop automation agent",
+  "self-hosted ai agent runtime",
+  "evidence-based ai agent",
+]
+dependencies = [
+  "redis>=7.4.0",
+]
+
+[project.scripts]
+ceos = "contract_evidence_os.api.cli:main"
+ceos-server = "contract_evidence_os.api.server_main:main"
+ceos-worker = "contract_evidence_os.api.worker_main:main"
+ceos-dispatcher = "contract_evidence_os.api.dispatcher_main:main"
+ceos-maintenance = "contract_evidence_os.api.maintenance_main:main"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.2",
+  "pytest>=9.0.0",
+  "pytest-cov>=6.2.1",
+  "fakeredis>=2.35.1",
+]
+postgres = [
+  "psycopg[binary]>=3.2.9",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"

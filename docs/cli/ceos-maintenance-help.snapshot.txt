@@ -1,0 +1,23 @@
+usage: ceos-maintenance [-h] [--storage-root STORAGE_ROOT] [--config CONFIG] [--restart-recovery]
+                        [--maintenance-worker-id MAINTENANCE_WORKER_ID] [--host-id HOST_ID]
+                        [--run-background-maintenance] [--daemon-cycles DAEMON_CYCLES] [--daemon]
+                        [--once] [--poll-interval-seconds POLL_INTERVAL_SECONDS]
+                        [--heartbeat-seconds HEARTBEAT_SECONDS] [--lease-seconds LEASE_SECONDS]
+                        [--max-cycles MAX_CYCLES] [--interrupt-after INTERRUPT_AFTER]
+
+options:
+  -h, --help            show this help message and exit
+  --storage-root STORAGE_ROOT
+  --config CONFIG
+  --restart-recovery
+  --maintenance-worker-id MAINTENANCE_WORKER_ID
+  --host-id HOST_ID
+  --run-background-maintenance
+  --daemon-cycles DAEMON_CYCLES
+  --daemon
+  --once
+  --poll-interval-seconds POLL_INTERVAL_SECONDS
+  --heartbeat-seconds HEARTBEAT_SECONDS
+  --lease-seconds LEASE_SECONDS
+  --max-cycles MAX_CYCLES
+  --interrupt-after INTERRUPT_AFTER

@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "contract-evidence-os"
+    metrics_path: /metrics
+    scheme: http
+    authorization:
+      type: Bearer
+      credentials: dev-token
+    static_configs:
+      - targets: ["ceos-server:8080"]

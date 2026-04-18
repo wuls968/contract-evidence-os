@@ -1,0 +1,9 @@
+[run]
+branch = True
+source =
+    src/contract_evidence_os
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 1

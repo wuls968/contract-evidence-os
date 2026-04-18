@@ -1,0 +1,23 @@
+{
+  "cases": [
+    {
+      "case_id": "golden-001",
+      "goal": "Read the attachment and summarize the mandatory constraints with evidence.",
+      "attachments": [
+        "examples/sample_requirements.txt"
+      ],
+      "preferences": {
+        "output_style": "structured"
+      },
+      "prohibitions": [
+        "Do not delete audit history."
+      ],
+      "expected_facts": [
+        "Audit history must never be deleted.",
+        "Every important summary must cite evidence.",
+        "Destructive actions require explicit approval."
+      ],
+      "min_evidence_ref_count": 3
+    }
+  ]
+}

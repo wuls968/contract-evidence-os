@@ -1,0 +1,12 @@
+[Unit]
+Description=Contract-Evidence OS resident maintenance daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=ceos-maintenance --daemon --poll-interval-seconds 30 --heartbeat-seconds 30 --lease-seconds 300 --max-cycles 999999
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

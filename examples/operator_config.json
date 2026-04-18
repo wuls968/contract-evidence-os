@@ -1,0 +1,20 @@
+{
+  "storage_root": "./runtime",
+  "provider_profiles": {
+    "planner": "quality",
+    "builder": "quality",
+    "critic": "quality",
+    "verifier": "quality"
+  },
+  "tool_matrix": {
+    "file_retrieval": true,
+    "web_intelligence": true,
+    "computer_use": false
+  },
+  "operator_profile": {
+    "default_role": "Strategist"
+  },
+  "secrets_env": {
+    "api_key_env": "CEOS_API_KEY"
+  }
+}
