@@ -50,3 +50,6 @@ def test_install_script_and_readme_present_a_clear_local_first_story() -> None:
     assert "ceos_operator_token" in readme
     assert "ceos_api_key" in readme
     assert "getting-started.md" in readme
+    assert "user-guide.md" in readme
+    assert "trusted ai runtime" in readme
+    assert "small teams" in readme or "small-team" in readme

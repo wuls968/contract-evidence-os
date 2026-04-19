@@ -1,27 +1,10 @@
 # Contract-Evidence OS Getting Started
 
-This guide is the full local-first manual for installing, configuring, starting, and troubleshooting Contract-Evidence OS.
+This is the shortest reliable first-run guide for Contract-Evidence OS.
 
-It is written for the two most common first-run questions:
+If you want the complete operator manual, read [user-guide.md](user-guide.md).
 
-1. Why does the service not start after install?
-2. Where do I put the API configuration?
-
-## 1. What Gets Configured
-
-Contract-Evidence OS needs two separate kinds of credentials:
-
-- `CEOS_OPERATOR_TOKEN`
-  This protects the local or remote operator HTTP service started by `ceos-server`.
-- `CEOS_API_KEY`
-  This is the model provider key used when you want live provider requests instead of deterministic local fallback behavior.
-
-These are different on purpose.
-
-- The operator token secures your control plane.
-- The API key talks to your model provider.
-
-## 2. Recommended Install Path
+## 1. Install
 
 From a fresh clone:
 
@@ -34,59 +17,32 @@ cd contract-evidence-os
 The installer will:
 
 - create `.venv`
-- install Contract-Evidence OS
+- install the project
 - expose `ceos`, `ceos-server`, `ceos-worker`, `ceos-dispatcher`, and `ceos-maintenance`
-- ask interactive questions and write local config for you
+- build the dashboard bundle when `npm` is available
+- write `runtime/config.local.json`
+- write `runtime/.env.local`
 
-## 3. What The Installer Will Ask
+## 2. What You Will Be Asked
 
-When you use `--init-config`, the installer will ask for:
+The installer will interactively ask for:
 
 - the local operator service port
-- the operator token to store as `CEOS_OPERATOR_TOKEN`
-- which provider to use
-  - OpenAI-compatible
-  - Anthropic
-  - Skip for now
-- the provider base URL
-- the default model name
-- the provider API key to store as `CEOS_API_KEY`
-- whether to run a lightweight provider verification now
-
-By default, the installer writes:
-
-- `runtime/config.local.json`
-- `runtime/.env.local`
-
-## 4. Files You Will End Up With
-
-### `runtime/config.local.json`
-
-This file stores structured runtime settings such as:
-
-- storage root
-- local host and port
-- observability settings
-- maintenance settings
-- software control defaults
-- provider kind, default model, and default base URL
-
-### `runtime/.env.local`
-
-This file stores local environment variables such as:
-
 - `CEOS_OPERATOR_TOKEN`
-- `CEOS_STORAGE_ROOT`
-- `CEOS_PROVIDER_KIND`
-- `CEOS_API_KEY`
+- provider kind
 - `CEOS_API_BASE_URL`
-- `CEOS_DEFAULT_MODEL`
+- default model
+- `CEOS_API_KEY`
+- whether to run a lightweight provider verification
 
-This file is local plaintext. That is intentional for local-first usability.
+These are different credentials:
 
-## 5. Starting The System Successfully
+- `CEOS_OPERATOR_TOKEN` protects your local control plane
+- `CEOS_API_KEY` is your model provider API key
 
-The most reliable first-start path is:
+## 3. Start The System
+
+The most reliable startup path is:
 
 ```bash
 source runtime/.env.local
@@ -96,68 +52,47 @@ ceos --config runtime/config.local.json service-health
 ceos-server --config runtime/config.local.json
 ```
 
-If everything is configured correctly:
-
-- `system-report` should return JSON
-- `doctor` should explain whether config, provider, admin setup, and dashboard bundle are ready
-- `service-health` should return JSON with a healthy local runtime summary
-- `ceos-server` should stay running instead of exiting immediately
-
-## 5A. Open The Web Console
-
-Once `ceos-server` is running, open:
+Then open:
 
 - [http://127.0.0.1:8080/](http://127.0.0.1:8080/)
 
-The browser flow is:
+Expected flow:
 
-- `/setup` on first run if no bootstrap admin exists
-- `/login` once the admin account exists
+- `/setup` if no bootstrap admin exists
+- `/login` after bootstrap
 - `/dashboard` after sign-in
 
-Important routes:
+## 4. Important Dashboard Pages
 
-- `/dashboard` for recent tasks, health, incidents, and usage summary
-- `/tasks/:taskId` for task cockpit, evidence, approvals, and continuity
-- `/memory` for AMOS overview, timeline, and project-state views
-- `/software` for harnesses, manifests, macros, failure clusters, and recovery hints
-- `/maintenance` for daemon state, incidents, and recommendations
-- `/usage` for task-level and provider-level token monitoring
-- `/settings` for runtime, provider, and OIDC configuration
-- `/doctor` for startup and configuration diagnostics
+- `/dashboard` for health, recent tasks, approvals, usage, and trust posture
+- `/tasks/:taskId` for a single task timeline, evidence trace, and playbook
+- `/memory` for AMOS overview
+- `/software` for governed automation surfaces
+- `/maintenance` for incidents and daemon posture
+- `/usage` for token and cost monitoring
+- `/settings` for runtime, provider, auth, and OIDC configuration
+- `/doctor` for startup and readiness diagnostics
 
-## 6. Why Startup Sometimes Fails
+## 5. Most Common Startup Failure
 
-The most common startup failure is:
+The most common error is a missing operator token.
 
-```text
-operator token is required via --token or CEOS_OPERATOR_TOKEN
-```
-
-That usually means you forgot to load the generated env file.
-
-Fix:
+Typical fix:
 
 ```bash
 source runtime/.env.local
 ceos-server --config runtime/config.local.json
 ```
 
-If you do not want to source the env file, you can also pass the token directly:
+If you prefer, you can also pass the token directly:
 
 ```bash
 ceos-server --config runtime/config.local.json --token "your-token"
 ```
 
-## 7. API Configuration
+## 6. API Configuration
 
-### OpenAI-compatible setup
-
-Use this if you want to talk to:
-
-- OpenAI
-- a compatible OpenAI-style gateway
-- a self-hosted compatible endpoint
+### OpenAI-compatible
 
 Typical values:
 
@@ -166,9 +101,7 @@ Typical values:
 - `CEOS_API_KEY=...`
 - `CEOS_DEFAULT_MODEL=gpt-4.1-mini`
 
-The runtime uses the configured base URL and resolves the live request path internally.
-
-### Anthropic setup
+### Anthropic
 
 Typical values:
 
@@ -177,107 +110,37 @@ Typical values:
 - `CEOS_API_KEY=...`
 - `CEOS_DEFAULT_MODEL=claude-sonnet-4-20250514`
 
-## 8A. Token And Cost Monitoring
+### Local-only fallback
 
-The console usage page is designed to answer:
+If you want to bring the system up before configuring a live provider, choose deterministic fallback during install.
 
-- which provider is consuming tokens
-- which tasks are currently the biggest spenders
-- whether fallback-heavy or degraded-provider behavior is spiking
-
-Open `/usage` to inspect:
-
-- 1h / 24h / 7d windows
-- provider token totals
-- task token totals
-- estimated cost where available
-
-## 8. How To Change API Settings Later
-
-Open:
-
-- `runtime/.env.local`
-- `runtime/config.local.json`
-
-The env file is where you usually change secrets and override values.
-
-After editing:
-
-```bash
-source runtime/.env.local
-```
-
-Then rerun:
-
-```bash
-ceos --config runtime/config.local.json system-report
-ceos --config runtime/config.local.json service-health
-```
-
-## 9. How Provider Verification Works
-
-If you choose verification during install, the installer will run a lightweight connectivity check:
-
-- OpenAI-compatible providers are checked through a simple authorized request
-- Anthropic providers are checked through a lightweight authenticated endpoint probe
-
-This is meant to catch:
-
-- wrong API key
-- wrong base URL
-- unreachable endpoint
-- auth failure
-
-If verification fails, installation still completes, but you should fix `runtime/.env.local` before running live tasks.
-
-## 10. Useful Commands
-
-### Local inspection
+## 7. Useful Commands
 
 ```bash
 ceos --config runtime/config.local.json doctor
 ceos --config runtime/config.local.json system-report
 ceos --config runtime/config.local.json service-health
 ceos --config runtime/config.local.json api-contract
+ceos --config runtime/config.local.json metrics-report
+ceos --config runtime/config.local.json maintenance-report
+ceos --config runtime/config.local.json software-control-report
 ```
 
-### Start the local control plane
+## 8. Maintenance
 
-```bash
-source runtime/.env.local
-ceos-server --config runtime/config.local.json
-```
-
-### Run maintenance
+Run one maintenance pass:
 
 ```bash
 ceos-maintenance --config runtime/config.local.json --once
 ```
 
-### Start the resident maintenance loop
+Run the resident loop:
 
 ```bash
 ceos-maintenance --config runtime/config.local.json --daemon --max-cycles 1
 ```
 
-## 11. Troubleshooting
-
-### `ceos` command not found
-
-Your user-level bin directory is not on `PATH`.
-
-The installer tells you which directory to add, usually:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-### Service exits immediately
-
-Usually this means:
-
-- you did not `source runtime/.env.local`
-- `CEOS_OPERATOR_TOKEN` is missing
+## 9. If Something Is Wrong
 
 Start with:
 
@@ -285,36 +148,15 @@ Start with:
 ceos --config runtime/config.local.json doctor
 ```
 
-That report will tell you whether the operator token, provider config, bootstrap admin, and frontend bundle are ready.
+That report tells you whether:
 
-### Live provider is configured but tasks still behave like deterministic fallback
+- the operator token is present
+- the provider config is valid
+- the frontend bundle exists
+- bootstrap admin setup is complete
+- OIDC readiness is okay
 
-Check:
+## 10. Read Next
 
-- `CEOS_API_KEY` is present
-- `CEOS_API_BASE_URL` is correct
-- `CEOS_PROVIDER_KIND` matches your endpoint
-- you reloaded the env file after editing it
-
-### I want local-only behavior for now
-
-Choose `Skip for now (deterministic/local-only)` during install.
-
-That lets you start the system without live provider access while still using the local runtime, memory, operator surface, and governed software-control paths.
-
-## 12. Mental Model
-
-If you remember only one thing, remember this:
-
-- `runtime/config.local.json` is the structured runtime profile
-- `runtime/.env.local` is where tokens and provider secrets live
-- `ceos doctor` is the fastest way to understand why startup or the dashboard is not ready
-- `runtime/.env.local` is where the secrets and local overrides live
-
-The shortest reliable loop is:
-
-```bash
-source runtime/.env.local
-ceos --config runtime/config.local.json system-report
-ceos-server --config runtime/config.local.json
-```
+- [Complete User Guide](user-guide.md)
+- [Operator API v1](../api/operator-v1.md)
