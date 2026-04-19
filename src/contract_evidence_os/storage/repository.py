@@ -534,6 +534,13 @@ class SQLiteRepository:
             },
         )
 
+    def list_source_records(self, task_id: str) -> list[SourceRecord]:
+        rows = self._fetchall(
+            "SELECT * FROM source_records WHERE task_id = ? ORDER BY retrieved_at ASC",
+            (task_id,),
+        )
+        return [self._model_from_row("source_records", row, SourceRecord) for row in rows]
+
     def save_evidence_graph(
         self,
         task_id: str,

@@ -61,3 +61,19 @@ def test_cli_can_inspect_handoff_and_open_questions(tmp_path: Path) -> None:
     questions_payload = json.loads(questions_stdout.getvalue())
     assert questions_payload
 
+
+def test_cli_doctor_reports_console_readiness(tmp_path: Path) -> None:
+    root = tmp_path / "runtime"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "config.local.json").write_text("{}", encoding="utf-8")
+
+    doctor_stdout = StringIO()
+    with redirect_stdout(doctor_stdout):
+        assert main(["--storage-root", str(root), "doctor"]) == 0
+
+    payload = json.loads(doctor_stdout.getvalue())
+    assert "startup" in payload
+    assert "system" in payload
+    assert "config" in payload
+    assert "provider_check" in payload
+    assert "frontend" in payload

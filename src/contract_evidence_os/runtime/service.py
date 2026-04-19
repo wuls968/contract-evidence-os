@@ -6,6 +6,7 @@ import json
 import socket
 import threading
 import hashlib
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -26,6 +27,7 @@ from contract_evidence_os.evidence.graph import EvidenceBuilder
 from contract_evidence_os.evidence.models import EvidenceGraph, ValidationReport
 from contract_evidence_os.evidence.models import SourceRecord
 from contract_evidence_os.evolution.engine import EvolutionEngine
+from contract_evidence_os.bootstrap import provider_runtime_base_url
 from contract_evidence_os.memory.matrix import MemoryMatrix
 from contract_evidence_os.memory.models import (
     MaintenanceDaemonRun,
@@ -80,6 +82,7 @@ from contract_evidence_os.runtime.shared_state import PostgresSharedStateBackend
 from contract_evidence_os.runtime.trust import HMACTrustManager, ServiceTrustPolicy, TrustBoundaryDescriptor
 from contract_evidence_os.runtime.providers import (
     AnthropicMessagesProvider,
+    DeterministicLLMProvider,
     OpenAIResponsesProvider,
     ProviderCapabilityRecord,
     ProviderError,
@@ -181,6 +184,7 @@ class RuntimeService:
     memory: MemoryMatrix = field(default_factory=MemoryMatrix)
     evolution: EvolutionEngine = field(default_factory=EvolutionEngine)
     cli_anything_repo_path: str | None = None
+    provider_settings: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.storage_root.mkdir(parents=True, exist_ok=True)
@@ -230,6 +234,7 @@ class RuntimeService:
         self.capacity_forecaster = ProviderCapacityForecaster(repository=self.repository, shared_state=self.shared_state_backend)
         self.quota_governor = ProviderQuotaGovernor(repository=self.repository, shared_state=self.shared_state_backend)
         self.policy_registry = PolicyRegistryManager(repository=self.repository)
+        self._configure_provider_manager()
         self.passports = default_passports()
         self.task_results: dict[str, TaskRunResult] = {}
         self.task_status_cache: dict[str, str] = {}
@@ -247,6 +252,48 @@ class RuntimeService:
         self.repository.save_routing_policy(self.default_routing_policy)
         if self.cli_anything_repo_path:
             self.configure_cli_anything_bridge(repo_path=self.cli_anything_repo_path, enabled=True)
+
+    def _configure_provider_manager(self) -> None:
+        settings = dict(self.provider_settings or {})
+        provider_kind = str(settings.get("kind", "deterministic")).strip() or "deterministic"
+        api_key_env = str(settings.get("api_key_env", "CEOS_API_KEY"))
+        base_url_env = str(settings.get("base_url_env", "CEOS_API_BASE_URL"))
+        api_key = str(settings.get("resolved_api_key") or os.environ.get(api_key_env, "")).strip()
+        base_url = str(settings.get("resolved_base_url") or os.environ.get(base_url_env, "") or settings.get("base_url", "")).strip()
+        default_model = str(settings.get("default_model", "")).strip()
+
+        if provider_kind == "openai-compatible" and api_key:
+            self.provider_manager = ProviderManager(
+                providers={
+                    "primary": OpenAIResponsesProvider(
+                        name="primary",
+                        api_key=api_key,
+                        base_url=provider_runtime_base_url("openai-compatible", base_url or "https://api.openai.com/v1"),
+                    ),
+                    "fallback": DeterministicLLMProvider(name="fallback"),
+                }
+            )
+            if default_model:
+                self.model_router.default_models["quality"] = default_model
+                self.model_router.default_models["economy"] = default_model
+            return
+        if provider_kind == "anthropic" and api_key:
+            model_name = default_model or "claude-sonnet-4-20250514"
+            self.provider_manager = ProviderManager(
+                providers={
+                    "primary": AnthropicMessagesProvider(
+                        name="primary",
+                        api_key=api_key,
+                        base_url=provider_runtime_base_url("anthropic", base_url or "https://api.anthropic.com/v1"),
+                        model_default=model_name,
+                        anthropic_version=str(settings.get("anthropic_version", "2023-06-01")),
+                    ),
+                    "fallback": DeterministicLLMProvider(name="fallback"),
+                }
+            )
+            self.model_router.default_models["quality"] = model_name
+            self.model_router.default_models["economy"] = model_name
+            return
 
     def create_task(
         self,

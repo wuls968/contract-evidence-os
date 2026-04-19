@@ -41,6 +41,24 @@ Contract-Evidence OS is built for workflows like:
 - creating an AI agent with long-term memory, evidence, approvals, and recovery
 - managing maintenance, incidents, and repair from both CLI and remote operator APIs
 
+## Human-Friendly UX Console
+
+The newest default human surface is the local web console served by `ceos-server`.
+
+It gives you:
+
+- a browser-first dashboard instead of raw JSON spelunking
+- guided first-run setup at `/setup`
+- login and shared-user sessions at `/login`
+- a task cockpit for evidence, approvals, replay, and continuity
+- AMOS memory views for timelines, project state, and maintenance status
+- a software console for harnesses, macros, failures, and recovery hints
+- a usage page for task-level and provider-level token monitoring
+- a settings center for provider, auth, and runtime configuration
+- a doctor page for startup, config, provider, auth, and dashboard diagnostics
+
+If you want something closer to an operator workstation than a pile of scripts, this is the surface to start with.
+
 ## Core Advantages
 
 If someone asks what this project is good at, the short answer is:
@@ -85,6 +103,7 @@ That installer will:
 - create a local `.venv`
 - install the project into it
 - expose `ceos`, `ceos-server`, `ceos-worker`, `ceos-dispatcher`, and `ceos-maintenance`
+- build the React/Vite dashboard bundle when `npm` is available
 - keep everything user-local instead of trying to write system-wide files
 
 If you want the installer to also generate a ready-to-edit local runtime profile:
@@ -93,10 +112,22 @@ If you want the installer to also generate a ready-to-edit local runtime profile
 ./scripts/install.sh --init-config
 ```
 
-That creates:
+That path is interactive. It will ask you for:
+
+- a local `CEOS_OPERATOR_TOKEN` for `ceos-server`
+- which model API provider you want to use
+- the provider base URL
+- the provider API key stored as `CEOS_API_KEY`
+- whether to run a lightweight provider verification immediately
+
+It then creates:
 
 - `runtime/config.local.json`
 - `runtime/.env.local`
+
+If you want the full walkthrough, see the manual:
+
+- [Getting Started Manual](docs/manual/getting-started.md)
 
 ### First commands to run
 
@@ -116,10 +147,62 @@ If you used `--init-config`, a simple local-first startup path is:
 ```bash
 source runtime/.env.local
 ceos --config runtime/config.local.json system-report
+ceos --config runtime/config.local.json service-health
 ceos-server --config runtime/config.local.json
 ```
 
 The generated `config.local.json` keeps structured runtime settings such as storage root, host, port, observability, maintenance, and software-control defaults. The generated `.env.local` keeps local environment values such as `CEOS_OPERATOR_TOKEN`.
+
+The generated `.env.local` is also where install-time API settings live:
+
+- `CEOS_OPERATOR_TOKEN` for operator HTTP access
+- `CEOS_API_KEY` for your model provider
+- `CEOS_API_BASE_URL` for OpenAI-compatible or Anthropic endpoints
+- `CEOS_PROVIDER_KIND` and `CEOS_DEFAULT_MODEL` for provider selection
+
+### Launch the dashboard
+
+Once the env file is loaded, the shortest browser-first path is:
+
+```bash
+source runtime/.env.local
+ceos --config runtime/config.local.json doctor
+ceos-server --config runtime/config.local.json
+```
+
+Then open:
+
+- [http://127.0.0.1:8080/](http://127.0.0.1:8080/)
+
+Expected first-run behavior:
+
+- if no admin exists, `/` redirects to `/setup`
+- once the bootstrap admin is created, `/` redirects to `/login`
+- after login, the console takes you to `/dashboard`
+
+The main console pages are:
+
+- `/dashboard`
+- `/tasks/:taskId`
+- `/memory`
+- `/software`
+- `/maintenance`
+- `/usage`
+- `/settings`
+- `/doctor`
+
+If `ceos-server --config runtime/config.local.json` fails with an operator token error, the usual fix is:
+
+```bash
+source runtime/.env.local
+ceos-server --config runtime/config.local.json
+```
+
+If model-backed tasks fail later, the usual fix is to open `runtime/.env.local`, correct `CEOS_API_KEY` or `CEOS_API_BASE_URL`, then reload the file:
+
+```bash
+source runtime/.env.local
+```
 
 ### Development install
 
@@ -217,11 +300,11 @@ The CLI covers:
 - task creation, replay, audit, evidence, and approvals
 - memory kernel, evidence pack, timeline, project state, policy, and maintenance surfaces
 - software harness manifests, action receipts, and software-control reporting
-- system, metrics, maintenance, and service-health reports
+- system, metrics, maintenance, service-health, and doctor diagnostics
 
 ### Operator API v1
 
-The versioned HTTP contract lives in [operator-v1.md](/Users/a0000/contract-evidence-os/docs/api/operator-v1.md).
+The versioned HTTP contract lives in [operator-v1.md](docs/api/operator-v1.md).
 
 It covers:
 
@@ -259,6 +342,15 @@ Yes, through a governed **software control fabric** built around CLI-Anything ha
 
 Yes. This project is meant to run as a **self-hosted AI agent runtime** with local-first operation and optional remote operator governance.
 
+### How do I configure the API?
+
+The recommended path is `./scripts/install.sh --init-config`. The installer will interactively write:
+
+- `runtime/config.local.json`
+- `runtime/.env.local`
+
+For a full step-by-step guide, including `CEOS_OPERATOR_TOKEN`, `CEOS_API_KEY`, OpenAI-compatible setup, Anthropic setup, startup commands, and troubleshooting, read [docs/manual/getting-started.md](docs/manual/getting-started.md).
+
 ### Is it auditable and replayable?
 
 Yes. That is one of the main reasons it exists. Contracts, evidence, receipts, replay, and audit lineage are all first-class parts of the design.
@@ -269,17 +361,17 @@ RAG alone does not give you a full long-running agent runtime, and workflow tool
 
 ## Repository Map
 
-- [src/contract_evidence_os/runtime](/Users/a0000/contract-evidence-os/src/contract_evidence_os/runtime)
+- [src/contract_evidence_os/runtime](src/contract_evidence_os/runtime)
   runtime execution, routing, provider, auth, coordination, reliability, and shared-state logic
-- [src/contract_evidence_os/memory](/Users/a0000/contract-evidence-os/src/contract_evidence_os/memory)
+- [src/contract_evidence_os/memory](src/contract_evidence_os/memory)
   AMOS kernel, matrix facade, repair, purge, rebuild, and maintenance operations
-- [src/contract_evidence_os/tools/anything_cli](/Users/a0000/contract-evidence-os/src/contract_evidence_os/tools/anything_cli)
+- [src/contract_evidence_os/tools/anything_cli](src/contract_evidence_os/tools/anything_cli)
   governed software control fabric and CLI-Anything integration
-- [src/contract_evidence_os/api](/Users/a0000/contract-evidence-os/src/contract_evidence_os/api)
+- [src/contract_evidence_os/api](src/contract_evidence_os/api)
   CLI, operator API, remote server, and role entrypoints
-- [docs/adr](/Users/a0000/contract-evidence-os/docs/adr)
+- [docs/adr](docs/adr)
   architectural decision trail
-- [docs/examples](/Users/a0000/contract-evidence-os/docs/examples)
+- [docs/examples](docs/examples)
   worked examples for runtime, AMOS, repair, control plane, and software control flows
 
 ## Packaging, Docker, and Quality
@@ -313,7 +405,7 @@ The container defaults to `ceos-server --host 0.0.0.0`. If `CEOS_OPERATOR_TOKEN`
 
 ## Learn More
 
-- [Operator API v1](/Users/a0000/contract-evidence-os/docs/api/operator-v1.md)
-- [Future extension path](/Users/a0000/contract-evidence-os/docs/architecture/future-extension-path.md)
-- [Release 0.9.0](/Users/a0000/contract-evidence-os/docs/releases/0.9.0.md)
-- [Migration guide](/Users/a0000/contract-evidence-os/docs/releases/migration-0.9.0.md)
+- [Operator API v1](docs/api/operator-v1.md)
+- [Future extension path](docs/architecture/future-extension-path.md)
+- [Release 0.9.0](docs/releases/0.9.0.md)
+- [Migration guide](docs/releases/migration-0.9.0.md)

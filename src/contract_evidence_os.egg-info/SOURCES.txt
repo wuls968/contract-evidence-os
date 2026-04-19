@@ -3,6 +3,7 @@ README.md
 pyproject.toml
 src/contract_evidence_os/__init__.py
 src/contract_evidence_os/base.py
+src/contract_evidence_os/bootstrap.py
 src/contract_evidence_os/config.py
 src/contract_evidence_os.egg-info/PKG-INFO
 src/contract_evidence_os.egg-info/SOURCES.txt

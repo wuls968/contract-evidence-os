@@ -43,6 +43,7 @@ def operator_api_contract() -> dict[str, Any]:
         "metrics-report",
         "maintenance-report",
         "service-health",
+        "doctor",
         "api-contract",
         "memory-kernel-state",
         "memory-evidence-pack",

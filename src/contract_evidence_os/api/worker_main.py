@@ -28,19 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         config_path=None if args.config is None else Path(args.config),
         overrides={} if args.storage_root is None else {"storage_root": args.storage_root},
     )
-    backend_kind = str(config.external_backend.get("kind", "sqlite"))
-    backend_url = str(config.external_backend.get("url", "")) or None
-    runtime = RuntimeService(
-        storage_root=Path(config.storage_root),
-        queue_backend_kind=backend_kind,
-        coordination_backend_kind=backend_kind,
-        external_backend_url=backend_url,
-        external_backend_namespace=str(config.external_backend.get("namespace", "ceos")),
-        shared_state_backend_kind=str(config.shared_state_backend.get("kind", "sqlite")),
-        shared_state_backend_url=str(config.shared_state_backend.get("url", "")) or None,
-        trust_mode=str(config.trust.get("mode", "standard")),
-        cli_anything_repo_path=str(config.software_control.get("repo_path", "")) or None,
-    )
+    runtime = RuntimeService(storage_root=Path(config.storage_root), **config.runtime_kwargs())
     runtime.register_worker(
         worker_id=args.worker_id,
         worker_role="worker",

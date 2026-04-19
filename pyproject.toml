@@ -20,7 +20,9 @@ keywords = [
   "evidence-based ai agent",
 ]
 dependencies = [
+  "fastapi>=0.115.0",
   "redis>=7.4.0",
+  "uvicorn>=0.35.0",
 ]
 
 [project.scripts]
