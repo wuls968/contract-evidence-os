@@ -230,6 +230,18 @@ It shows:
 - evidence trace
 - trusted playbook
 - memory snapshot
+- collaboration leases, branches, and handoff windows
+- strategy feedback, candidates, canaries, and promotion posture
+
+This page is now also where you can actively coordinate work, not just inspect it.
+
+Typical actions from the task cockpit include:
+
+- acquire a lease for a phase such as `delivery` or `verification`
+- create a branch for parallel evidence or tool work
+- open a handoff window from one operator to another
+- record strategy feedback after review
+- propose and promote a strategy candidate after evaluation and canary
 
 ### `/memory`
 
@@ -438,6 +450,39 @@ That means:
 
 This is one of the biggest differences from a typical prompt-driven agent system.
 
+### What a healthy task flow looks like
+
+For one serious task, the intended path is usually:
+
+1. create or resume the task
+2. inspect the contract, status, and evidence trace
+3. assign or confirm owner, reviewer, and approval assignee
+4. use leases and branches when multiple people are involved
+5. use a handoff summary when work changes hands
+6. approve, deny, or review where required
+7. inspect usage, audit, and memory before considering the task complete
+
+This is why task operation is centered on the cockpit rather than on a bare task list.
+
+### Concurrent task coordination
+
+The system is designed for coordinated concurrency, not free-form simultaneous editing.
+
+The main primitives are:
+
+- **task ownership**: who is primarily responsible right now
+- **lease**: who currently holds a controlled right to work a phase
+- **branch**: a parallel slice of work such as evidence gathering or tool execution
+- **handoff**: an explicit transfer window from one collaborator to another
+- **reviewer**: the person accountable for review-sensitive decisions
+- **watcher**: an observer who stays informed without taking execution ownership
+
+The safest pattern is:
+
+- one owner lease for the high-risk phase
+- parallel branches for research, evidence, or tool runs
+- merge and review before shared conclusions become the main task story
+
 ## 14. Evidence, Audit, Playbooks, and Benchmarks
 
 ### Evidence
@@ -498,6 +543,49 @@ When you inspect memory from the dashboard, you are not only seeing “chat hist
 
 You are seeing a runtime memory system with operational semantics.
 
+### Memory scopes
+
+The memory layer now has explicit trust and audience scopes:
+
+- `personal_private`
+- `task_shared`
+- `workspace_shared`
+- `published_trusted`
+
+This matters because not every useful memory item should become team-trusted state immediately.
+
+Use the scopes like this:
+
+- `personal_private` for tentative notes, early thoughts, and individual scratch state
+- `task_shared` for coordination state that belongs to one task and one team effort
+- `workspace_shared` for reusable shared memory that is not yet the strongest trusted layer
+- `published_trusted` for reviewed or benchmark-backed memory suitable for the highest shared trust posture
+
+### Summary types
+
+AMOS also separates summary types so long-horizon work stays understandable:
+
+- `live_working_summary`
+- `handoff_summary`
+- `task_completion_summary`
+- `workspace_digest`
+
+In practice:
+
+- use a handoff summary when another person needs to take over
+- use a completion summary when the task is effectively done
+- use a workspace digest when you want to lift repeated learning out of one task into broader shared memory
+
+### Memory promotion and review
+
+The default trust logic is intentionally conservative.
+
+- Personal summaries can be generated freely.
+- Shared summaries should be evidence-bound.
+- `published_trusted` memory should only appear after explicit review or benchmark-backed confidence.
+
+That conservative model is what lets memory stay useful without becoming a hidden source of drift.
+
 ## 16. Software Control Fabric
 
 The software control fabric is how Contract-Evidence OS performs automation without abandoning governance.
@@ -553,6 +641,54 @@ The operator API v1 remains the stable programmatic surface.
 Read:
 
 - [../api/operator-v1.md](../api/operator-v1.md)
+
+### Useful API recipes
+
+Inspect the runtime:
+
+```bash
+curl \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  http://127.0.0.1:8080/v1/reports/system
+```
+
+Inspect one task:
+
+```bash
+curl \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  http://127.0.0.1:8080/v1/tasks/<task-id>/collaboration
+```
+
+Inspect one task's strategy state:
+
+```bash
+curl \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  "http://127.0.0.1:8080/v1/strategy/overview?scope_key=<task-id>"
+```
+
+Create a collaboration branch:
+
+```bash
+curl \
+  -X POST \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"actor":"operator@example.com","branch_kind":"evidence","title":"Collect final evidence"}' \
+  http://127.0.0.1:8080/v1/tasks/<task-id>/branches
+```
+
+Create a strategy candidate:
+
+```bash
+curl \
+  -X POST \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"scope_key":"<task-id>","actor":"reviewer@example.com","strategy_kind":"summarization_policy","target_component":"summary.handoff","hypothesis":"Prefer reviewed handoff summaries.","supporting_signal_ids":["<signal-id>"]}' \
+  http://127.0.0.1:8080/v1/strategy/candidates
+```
 
 ## 19. Maintenance and Ongoing Operations
 
@@ -617,6 +753,18 @@ Use:
 
 This is the default organizational shape the system is designed for right now.
 
+### Small-team daily operating pattern
+
+For a small team, a strong default rhythm is:
+
+1. admins manage users, sessions, invitations, and provider/OIDC settings
+2. operators own or branch work inside task cockpit pages
+3. reviewers record feedback, approve risky actions, and promote strategy changes
+4. watchers stay informed through collaboration views and audit
+5. everyone uses `/usage`, `/maintenance`, `/audit`, and `/doctor` as shared operational truth surfaces
+
+If you keep those responsibilities visible, the runtime stays much easier to trust.
+
 ### Enterprise-adjacent self-hosted exploration
 
 You can also use the project as a base for more formal internal deployment.
@@ -675,12 +823,41 @@ Check:
 - `CEOS_PROVIDER_KIND` matches your endpoint
 - you reloaded `.env.local`
 
+### Collaboration actions succeed but the page still looks stale
+
+Refresh the task cockpit or collaboration page and re-check:
+
+- the selected task id
+- the current browser session
+- whether the action wrote an audit-visible event
+
+If needed, compare the browser view with:
+
+```bash
+ceos --config runtime/config.local.json system-report
+ceos --config runtime/config.local.json api-contract
+```
+
+and the corresponding `/v1/tasks/<task-id>/...` route.
+
+### Strategy candidates are visible but do not promote
+
+Usually this means one of three things:
+
+- the feedback signal was recorded but the candidate still needs evaluation
+- the canary has not been run or did not pass cleanly
+- the acting user does not have the right reviewer / approver posture
+
+Check the task cockpit strategy panel, then inspect the same task through the operator API if needed.
+
 ## 23. Documentation Map
 
 If you want to go deeper after this guide:
 
 - [getting-started.md](getting-started.md) for the shortest first-run path
+- [../runbooks/small-team-best-practices.md](../runbooks/small-team-best-practices.md) for team coordination, memory hygiene, handoffs, and review posture
 - [../api/operator-v1.md](../api/operator-v1.md) for API contract details
+- [../api/operator-v1-user-manual.md](../api/operator-v1-user-manual.md) for practical API usage patterns and `curl` examples
 - [../architecture/future-extension-path.md](../architecture/future-extension-path.md) for roadmap direction
 - [../examples](../examples) for example runtime scenarios
 - [../runbooks](../runbooks) for operational procedures
@@ -695,3 +872,11 @@ If you only remember five things, remember these:
 3. `ceos doctor` is the fastest way to understand why the runtime or dashboard is not ready.
 4. The browser console is the best first place to operate the system once it is running.
 5. Contract-Evidence OS is strongest when you use it as a trusted runtime with evidence, audit, review, memory, and governed automation together, not as a bare prompt wrapper.
+
+If you remember five more:
+
+1. Use the task cockpit as the main place to work one task deeply.
+2. Use scoped memory instead of treating all memory as equally trusted.
+3. Use leases, branches, and handoffs when multiple people are involved.
+4. Use the strategy control plane to improve behavior through governed feedback, not hidden tweaks.
+5. Treat `/usage`, `/maintenance`, `/audit`, `/benchmarks`, and `/doctor` as the runtime's operational truth surfaces.

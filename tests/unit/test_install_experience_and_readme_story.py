@@ -49,6 +49,13 @@ def test_install_script_and_readme_present_a_clear_local_first_story() -> None:
     assert "source runtime/.env.local" in readme
     assert "ceos_operator_token" in readme
     assert "ceos_api_key" in readme
+    assert "memory scopes" in readme
+    assert "strategy control plane" in readme
+    assert "leases, branches, and handoff" in readme
+    assert "architecture at a glance" in readme
+    assert "feature comparison at a glance" in readme
+    assert "small-team-best-practices.md" in readme
+    assert "operator-v1-user-manual.md" in readme
     assert "getting-started.md" in readme
     assert "user-guide.md" in readme
     assert "trusted ai runtime" in readme

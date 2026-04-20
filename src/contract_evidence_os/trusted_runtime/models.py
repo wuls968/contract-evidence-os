@@ -238,10 +238,11 @@ class TaskCollaborationBinding(SchemaModel):
     task_id: str
     owner: str
     reviewer: str
-    watchers: list[str]
-    approval_assignee: str
-    blocked_by: str
-    waiting_for: str
+    operators: list[str] = field(default_factory=list)
+    watchers: list[str] = field(default_factory=list)
+    approval_assignee: str = ""
+    blocked_by: str = ""
+    waiting_for: str = ""
     recent_activity: list[str] = field(default_factory=list)
     updated_at: datetime = field(default_factory=utc_now)
 
@@ -292,6 +293,80 @@ class SessionAuditRecord(SchemaModel):
     action: str
     actor: str
     details: dict[str, Any]
+    created_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class TaskLease(SchemaModel):
+    """Task-scoped lease used to coordinate concurrent ownership."""
+
+    version: str
+    lease_id: str
+    task_id: str
+    actor: str
+    lease_kind: str
+    phase: str
+    status: str
+    created_at: datetime = field(default_factory=utc_now)
+    expires_at: datetime | None = None
+    released_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class TaskBranch(SchemaModel):
+    """Parallel branch of work under one task."""
+
+    version: str
+    branch_id: str
+    task_id: str
+    actor: str
+    branch_kind: str
+    title: str
+    status: str
+    parent_branch_id: str = ""
+    created_at: datetime = field(default_factory=utc_now)
+    merged_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class HandoffWindow(SchemaModel):
+    """Explicit handoff window between two collaborators."""
+
+    version: str
+    handoff_id: str
+    task_id: str
+    from_actor: str
+    to_actor: str
+    summary: str
+    status: str
+    branch_id: str = ""
+    created_at: datetime = field(default_factory=utc_now)
+    completed_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class CollaborationEvent(SchemaModel):
+    """Audit-friendly collaboration event for task coordination."""
+
+    version: str
+    event_id: str
+    task_id: str
+    actor: str
+    event_type: str
+    summary: str
+    related_ref: str = ""
     created_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:

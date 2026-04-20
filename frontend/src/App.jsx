@@ -437,9 +437,170 @@ function DashboardPage({ liveEvents }) {
 
 function TaskPage() {
   const { taskId } = useParams();
-  const { data, loading, error } = useJson(`/ui/tasks/${taskId}`);
+  const { data, loading, error, setData } = useJson(`/ui/tasks/${taskId}`);
+  const [actionError, setActionError] = useState("");
+  const [actionState, setActionState] = useState("");
   if (loading) return <LoadingState label="Loading task cockpit" />;
   if (error) return <ErrorBanner title="Task cockpit unavailable" detail={error} />;
+  const collaboration = data.collaboration || {};
+  const binding = collaboration.binding || {};
+  const strategy = data.strategy || {};
+  const collaborationTimeline = buildCollaborationTimeline(collaboration);
+
+  async function refreshTask() {
+    const payload = await requestJson(`/ui/tasks/${taskId}`);
+    setData(payload);
+  }
+
+  async function runTaskAction(callback, successMessage) {
+    setActionError("");
+    setActionState("");
+    try {
+      await callback();
+      await refreshTask();
+      setActionState(successMessage);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  async function acquireLease(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/leases`, {
+          method: "POST",
+          body: JSON.stringify({
+            actor: form.get("actor"),
+            lease_kind: form.get("lease_kind"),
+            phase: form.get("phase"),
+            ttl_seconds: Number(form.get("ttl_seconds") || 900),
+          }),
+        }),
+      "Task lease acquired.",
+    );
+  }
+
+  async function createBranch(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/branches`, {
+          method: "POST",
+          body: JSON.stringify({
+            actor: form.get("actor"),
+            branch_kind: form.get("branch_kind"),
+            title: form.get("title"),
+            parent_branch_id: form.get("parent_branch_id"),
+          }),
+        }),
+      "Task branch created.",
+    );
+  }
+
+  async function openHandoff(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/handoff`, {
+          method: "POST",
+          body: JSON.stringify({
+            from_actor: form.get("from_actor"),
+            to_actor: form.get("to_actor"),
+            summary: form.get("summary"),
+            branch_id: form.get("branch_id"),
+          }),
+        }),
+      "Handoff window opened.",
+    );
+  }
+
+  async function recordFeedback(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/strategy/feedback`, {
+          method: "POST",
+          body: JSON.stringify({
+            actor: form.get("actor"),
+            strategy_kind: form.get("strategy_kind"),
+            signal_kind: form.get("signal_kind"),
+            metrics: { quality: Number(form.get("quality") || 0) },
+            evidence_refs: [],
+          }),
+        }),
+      "Strategy feedback recorded.",
+    );
+  }
+
+  async function createStrategyCandidate(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const supportingSignalIds = String(form.get("supporting_signal_ids") || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const fallbackSignalIds = (strategy.feedback_signals || []).slice(-3).map((item) => item.signal_id);
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/strategy/candidates`, {
+          method: "POST",
+          body: JSON.stringify({
+            actor: form.get("actor"),
+            strategy_kind: form.get("strategy_kind"),
+            target_component: form.get("target_component"),
+            hypothesis: form.get("hypothesis"),
+            supporting_signal_ids: supportingSignalIds.length ? supportingSignalIds : fallbackSignalIds,
+          }),
+        }),
+      "Strategy candidate created.",
+    );
+  }
+
+  async function evaluateCandidate(candidateId) {
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/strategy/candidates/${candidateId}/evaluate`, {
+          method: "POST",
+          body: JSON.stringify({ regression_failures: 0, gain: 0.15 }),
+        }),
+      "Candidate evaluated.",
+    );
+  }
+
+  async function canaryCandidate(candidateId) {
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/strategy/candidates/${candidateId}/canary`, {
+          method: "POST",
+          body: JSON.stringify({
+            actor: binding.reviewer || binding.owner || "reviewer@example.com",
+            success_rate: 0.9,
+            anomaly_count: 0,
+          }),
+        }),
+      "Canary completed.",
+    );
+  }
+
+  async function promoteCandidate(candidateId) {
+    await runTaskAction(
+      () =>
+        requestJson(`/ui/tasks/${taskId}/strategy/candidates/${candidateId}/promote`, {
+          method: "POST",
+          body: JSON.stringify({
+            actor: binding.reviewer || binding.owner || "reviewer@example.com",
+            reason: "Task cockpit promotion after positive review and canary.",
+          }),
+        }),
+      "Candidate promotion recorded.",
+    );
+  }
+
   return (
     <div className="page">
       <SectionHeader title={data.task.request.goal || data.task.task_id} description="Cockpit view: status, continuity, usage, memory, replay, and approvals." />
@@ -459,11 +620,46 @@ function TaskPage() {
         <Panel title="Task timeline" subtitle="Contract, checkpoints, approvals, receipts, and provider usage in one lane view.">
           <EChart option={buildTimelineOption(data.timeline)} height={260} />
         </Panel>
-        <Panel title="Collaboration" subtitle="Who owns this work and where review is blocked.">
-          <MetricRow label="Owner" value={data.collaboration.owner || "unassigned"} />
-          <MetricRow label="Reviewer" value={data.collaboration.reviewer || "unassigned"} />
-          <MetricRow label="Waiting for" value={data.collaboration.waiting_for || "nobody"} />
-          <MetricRow label="Approval assignee" value={data.collaboration.approval_assignee || "none"} />
+        <Panel title="Collaboration activity" subtitle="Leases, branches, handoffs, and events in a coordination lane.">
+          <EChart option={buildTimelineOption(collaborationTimeline)} height={260} />
+        </Panel>
+      </div>
+      <div className="dense-grid">
+        <Panel title="Collaboration state" subtitle="Who owns this work and where review or handoff is blocked.">
+          <MetricRow label="Owner" value={binding.owner || "unassigned"} />
+          <MetricRow label="Reviewer" value={binding.reviewer || "unassigned"} />
+          <MetricRow label="Approval assignee" value={binding.approval_assignee || "none"} />
+          <MetricRow label="Waiting for" value={binding.waiting_for || "nobody"} />
+          <MetricRow label="Operators" value={(binding.operators || []).join(", ") || "none"} />
+          <MetricRow label="Watchers" value={(binding.watchers || []).join(", ") || "none"} />
+          <InlineList label="Active leases" items={(collaboration.active_leases || []).map((item) => `${item.actor}:${item.phase}`)} />
+          <InlineList label="Branches" items={(collaboration.branches || []).map((item) => item.title)} />
+          <InlineList label="Handoffs" items={(collaboration.handoffs || []).map((item) => `${item.from_actor}→${item.to_actor}`)} />
+        </Panel>
+        <Panel title="Collaboration actions" subtitle="Open leases, branches, and handoffs without leaving the task cockpit.">
+          <form className="form-grid" onSubmit={acquireLease}>
+            <LabeledInput label="Lease actor" name="actor" defaultValue={binding.owner || "owner@example.com"} />
+            <LabeledSelect label="Lease kind" name="lease_kind" defaultValue="owner" options={["owner", "operator", "reviewer"]} />
+            <LabeledInput label="Phase" name="phase" defaultValue="delivery" />
+            <LabeledInput label="TTL seconds" name="ttl_seconds" defaultValue="900" />
+            <button className="primary-button" type="submit">Acquire lease</button>
+          </form>
+          <form className="form-grid" onSubmit={createBranch}>
+            <LabeledInput label="Branch actor" name="actor" defaultValue={(binding.operators || [binding.owner || "operator@example.com"])[0]} />
+            <LabeledSelect label="Branch kind" name="branch_kind" defaultValue="evidence" options={["research", "evidence", "tool-run", "review"]} />
+            <LabeledInput label="Title" name="title" defaultValue="Parallel evidence branch" />
+            <LabeledInput label="Parent branch" name="parent_branch_id" defaultValue="" />
+            <button className="primary-button" type="submit">Create branch</button>
+          </form>
+          <form className="form-grid" onSubmit={openHandoff}>
+            <LabeledInput label="From actor" name="from_actor" defaultValue={binding.owner || "owner@example.com"} />
+            <LabeledInput label="To actor" name="to_actor" defaultValue={(binding.operators || [binding.reviewer || "operator@example.com"])[0]} />
+            <LabeledInput label="Summary" name="summary" defaultValue="Continue the current review-ready branch." />
+            <LabeledInput label="Branch id" name="branch_id" defaultValue={collaboration.branches?.[0]?.branch_id || ""} />
+            <button className="primary-button" type="submit">Open handoff</button>
+          </form>
+          {actionState ? <ActionBanner tone="ok" title={actionState} description="Task cockpit state has been refreshed from the governed control plane." /> : null}
+          {actionError ? <ErrorBanner title="Task action failed" detail={actionError} /> : null}
         </Panel>
       </div>
       <div className="dense-grid">
@@ -472,6 +668,48 @@ function TaskPage() {
         </Panel>
         <Panel title="Approvals" subtitle="Task-scoped intervention queue.">
           {(data.approvals || []).length ? data.approvals.map((item) => <ListItem key={item.request_id}>{item.action_summary}</ListItem>) : <EmptyState title="No pending approvals" description="No manual gate is currently blocking this task." />}
+        </Panel>
+      </div>
+      <div className="dense-grid">
+        <Panel title="Strategy control plane" subtitle="Feedback, candidates, canaries, and promotions for this task scope.">
+          <MetricRow label="Feedback signals" value={formatNumber((strategy.feedback_signals || []).length)} />
+          <MetricRow label="Candidates" value={formatNumber((strategy.candidates || []).length)} />
+          <MetricRow label="Canaries" value={formatNumber((strategy.canaries || []).length)} />
+          <MetricRow label="Promotions" value={formatNumber((strategy.promotion_decisions || []).length)} />
+          {(strategy.candidates || []).length ? (strategy.candidates || []).map((candidate) => (
+            <div key={candidate.candidate_id} className="list-row">
+              <div>
+                <strong>{candidate.target_component}</strong>
+                <div className="muted">{candidate.hypothesis}</div>
+              </div>
+              <div className="button-row">
+                <button className="secondary-button" type="button" onClick={() => evaluateCandidate(candidate.candidate_id)}>Evaluate</button>
+                <button className="secondary-button" type="button" onClick={() => canaryCandidate(candidate.candidate_id)}>Canary</button>
+                <button className="primary-button" type="button" onClick={() => promoteCandidate(candidate.candidate_id)}>Promote</button>
+              </div>
+            </div>
+          )) : <EmptyState title="No strategy candidates yet" description="Record feedback and propose a candidate to start the governed strategy loop." />}
+        </Panel>
+        <Panel title="Strategy actions" subtitle="Create review-backed feedback and candidate proposals inside the task cockpit.">
+          <form className="form-grid" onSubmit={recordFeedback}>
+            <LabeledInput label="Feedback actor" name="actor" defaultValue={binding.reviewer || "reviewer@example.com"} />
+            <LabeledSelect label="Strategy kind" name="strategy_kind" defaultValue="summarization_policy" options={["summarization_policy", "tool_selection_policy", "provider_routing_policy"]} />
+            <LabeledInput label="Signal kind" name="signal_kind" defaultValue="review_accept" />
+            <LabeledInput label="Quality" name="quality" defaultValue="1.0" />
+            <button className="primary-button" type="submit">Record feedback</button>
+          </form>
+          <form className="form-grid" onSubmit={createStrategyCandidate}>
+            <LabeledInput label="Candidate actor" name="actor" defaultValue={binding.reviewer || "reviewer@example.com"} />
+            <LabeledSelect label="Strategy kind" name="strategy_kind" defaultValue="summarization_policy" options={["summarization_policy", "tool_selection_policy", "provider_routing_policy"]} />
+            <LabeledInput label="Target component" name="target_component" defaultValue="summary.handoff" />
+            <LabeledInput label="Hypothesis" name="hypothesis" defaultValue="Prefer reviewed handoff summaries for team coordination." />
+            <LabeledInput
+              label="Supporting signal ids"
+              name="supporting_signal_ids"
+              defaultValue={(strategy.feedback_signals || []).map((item) => item.signal_id).slice(-3).join(",")}
+            />
+            <button className="primary-button" type="submit">Create candidate</button>
+          </form>
         </Panel>
       </div>
       <div className="dense-grid">
@@ -700,9 +938,29 @@ function PlaybooksPage() {
 
 function CollaborationPage() {
   const { data, loading, error, setData } = useJson("/ui/collaboration/overview");
+  const [selectedTaskId, setSelectedTaskId] = useState("");
   const [actionError, setActionError] = useState("");
+  const { data: selectedTask, loading: selectedTaskLoading, error: selectedTaskError, setData: setSelectedTask } = useJson(
+    `/ui/tasks/${selectedTaskId || "__none__"}`,
+    { enabled: Boolean(selectedTaskId), dependencies: [selectedTaskId] },
+  );
+  useEffect(() => {
+    if (!selectedTaskId && (data?.task_bindings || []).length) {
+      setSelectedTaskId(data.task_bindings[0].task_id);
+    }
+  }, [data?.task_bindings, selectedTaskId]);
+
   if (loading) return <LoadingState label="Loading collaboration plane" />;
   if (error) return <ErrorBanner title="Collaboration plane unavailable" detail={error} />;
+
+  async function refreshCollaborationState(taskId = selectedTaskId) {
+    const payload = await requestJson("/ui/collaboration/overview");
+    setData(payload);
+    if (taskId) {
+      const taskPayload = await requestJson(`/ui/tasks/${taskId}`);
+      setSelectedTask(taskPayload);
+    }
+  }
 
   async function createUser(event) {
     event.preventDefault();
@@ -744,6 +1002,28 @@ function CollaborationPage() {
       });
       setData((current) => ({ ...(current || {}), invitations: [...(current?.invitations || []), payload.invitation] }));
       event.currentTarget.reset();
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  async function updateTaskCollaboration(event) {
+    event.preventDefault();
+    if (!selectedTaskId) return;
+    setActionError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      await requestJson(`/ui/tasks/${selectedTaskId}/collaboration`, {
+        method: "POST",
+        body: JSON.stringify({
+          owner: form.get("owner"),
+          reviewer: form.get("reviewer"),
+          operators: String(form.get("operators") || "").split(",").map((item) => item.trim()).filter(Boolean),
+          watchers: String(form.get("watchers") || "").split(",").map((item) => item.trim()).filter(Boolean),
+          approval_assignee: form.get("approval_assignee"),
+        }),
+      });
+      await refreshCollaborationState(selectedTaskId);
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -792,14 +1072,68 @@ function CollaborationPage() {
       </div>
       <Panel title="Task collaboration bindings" subtitle="Owner, reviewer, watchers, and blocked state per task.">
         {(data.task_bindings || []).map((item) => (
-          <div key={item.binding_id} className="list-row">
+          <button key={item.binding_id} className="copy-line" type="button" onClick={() => setSelectedTaskId(item.task_id)}>
             <div>
               <strong>{item.task_id}</strong>
               <div className="muted">Owner {item.owner} · Reviewer {item.reviewer}</div>
             </div>
             <span className="badge">{item.waiting_for || "ready"}</span>
-          </div>
+          </button>
         ))}
+      </Panel>
+      <div className="dense-grid">
+        <Panel title="Selected task coordination board" subtitle="Live leases, branches, handoffs, and collaboration events for one task.">
+          {!selectedTaskId ? <EmptyState title="No task selected" description="Pick a task binding to inspect collaboration details." /> : null}
+          {selectedTaskLoading ? <LoadingState label="Loading selected task coordination" /> : null}
+          {selectedTaskError ? <ErrorBanner title="Selected task unavailable" detail={selectedTaskError} /> : null}
+          {selectedTask ? (
+            <>
+              <MetricRow label="Task" value={selectedTask.task.task_id} />
+              <MetricRow label="Owner" value={selectedTask.collaboration.binding?.owner || "unassigned"} />
+              <MetricRow label="Reviewer" value={selectedTask.collaboration.binding?.reviewer || "unassigned"} />
+              <MetricRow label="Approval assignee" value={selectedTask.collaboration.binding?.approval_assignee || "none"} />
+              <EChart option={buildTimelineOption(buildCollaborationTimeline(selectedTask.collaboration))} height={220} />
+              <InlineList label="Leases" items={(selectedTask.collaboration.active_leases || []).map((item) => `${item.actor}:${item.phase}`)} />
+              <InlineList label="Branches" items={(selectedTask.collaboration.branches || []).map((item) => item.title)} />
+              <InlineList label="Handoffs" items={(selectedTask.collaboration.handoffs || []).map((item) => `${item.from_actor}→${item.to_actor}`)} />
+            </>
+          ) : null}
+        </Panel>
+        <Panel title="Update selected task ownership" subtitle="Reassign owner, reviewer, operators, and watchers without leaving the collaboration console.">
+          {selectedTask ? (
+            <form key={selectedTaskId} className="form-grid" onSubmit={updateTaskCollaboration}>
+              <LabeledInput label="Owner" name="owner" defaultValue={selectedTask.collaboration.binding?.owner || ""} />
+              <LabeledInput label="Reviewer" name="reviewer" defaultValue={selectedTask.collaboration.binding?.reviewer || ""} />
+              <LabeledInput label="Operators" name="operators" defaultValue={(selectedTask.collaboration.binding?.operators || []).join(",")} />
+              <LabeledInput label="Watchers" name="watchers" defaultValue={(selectedTask.collaboration.binding?.watchers || []).join(",")} />
+              <LabeledInput label="Approval assignee" name="approval_assignee" defaultValue={selectedTask.collaboration.binding?.approval_assignee || ""} />
+              <button className="primary-button" type="submit">Update task collaboration</button>
+            </form>
+          ) : (
+            <EmptyState title="Pick a task first" description="The selected task form appears here after you choose a task binding." />
+          )}
+          {actionError ? <ErrorBanner title="Action failed" detail={actionError} /> : null}
+        </Panel>
+      </div>
+      <Panel title="Selected task strategy" subtitle="Feedback, candidates, and promotions for the chosen coordination scope.">
+        {selectedTask ? (
+          <>
+            <MetricRow label="Feedback signals" value={formatNumber((selectedTask.strategy.feedback_signals || []).length)} />
+            <MetricRow label="Candidates" value={formatNumber((selectedTask.strategy.candidates || []).length)} />
+            <MetricRow label="Canaries" value={formatNumber((selectedTask.strategy.canaries || []).length)} />
+            {(selectedTask.strategy.candidates || []).map((item) => (
+              <div key={item.candidate_id} className="list-row">
+                <div>
+                  <strong>{item.target_component}</strong>
+                  <div className="muted">{item.hypothesis}</div>
+                </div>
+                <span className="badge">{item.status || item.promotion_result || "candidate"}</span>
+              </div>
+            ))}
+          </>
+        ) : (
+          <EmptyState title="No strategy scope selected" description="Choose a task binding to inspect strategy candidates and review posture." />
+        )}
       </Panel>
     </div>
   );
@@ -1117,6 +1451,39 @@ function MetricRow({ label, value }) {
       <strong>{String(value)}</strong>
     </div>
   );
+}
+
+function buildCollaborationTimeline(collaboration) {
+  const events = [
+    ...(collaboration?.active_leases || []).map((item) => ({
+      timestamp: item.created_at || item.expires_at,
+      lane: "leases",
+      label: `${item.actor} · ${item.phase}`,
+      kind: item.lease_kind,
+    })),
+    ...(collaboration?.branches || []).map((item) => ({
+      timestamp: item.created_at,
+      lane: "branches",
+      label: item.title,
+      kind: item.branch_kind,
+    })),
+    ...(collaboration?.handoffs || []).map((item) => ({
+      timestamp: item.created_at,
+      lane: "handoffs",
+      label: `${item.from_actor} → ${item.to_actor}`,
+      kind: item.status,
+    })),
+    ...(collaboration?.events || []).map((item) => ({
+      timestamp: item.created_at,
+      lane: "activity",
+      label: item.summary,
+      kind: item.event_type,
+    })),
+  ].filter((item) => item.timestamp);
+  return {
+    task_id: collaboration?.task_id || "collaboration",
+    events,
+  };
 }
 
 function UsageBar({ providers }) {

@@ -115,3 +115,54 @@ class MemoryPolicyAnalyticsRecord(SchemaModel):
 
     def __post_init__(self) -> None:
         self.validate()
+
+
+@dataclass
+class StrategyFeedbackSignal(SchemaModel):
+    """Feedback signal used to drive governed strategy evolution."""
+
+    version: str
+    signal_id: str
+    scope_key: str
+    actor: str
+    strategy_kind: str
+    signal_kind: str
+    metrics: dict[str, Any]
+    evidence_refs: list[str]
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class StrategyPromotionDecision(SchemaModel):
+    """Promotion decision for a strategy candidate."""
+
+    version: str
+    decision_id: str
+    candidate_id: str
+    scope_key: str
+    actor: str
+    decision: str
+    reason: str
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class StrategyRollbackDecision(SchemaModel):
+    """Rollback decision for a strategy candidate."""
+
+    version: str
+    decision_id: str
+    candidate_id: str
+    scope_key: str
+    actor: str
+    reason: str
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()

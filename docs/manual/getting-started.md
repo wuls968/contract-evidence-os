@@ -65,13 +65,23 @@ Expected flow:
 ## 4. Important Dashboard Pages
 
 - `/dashboard` for health, recent tasks, approvals, usage, and trust posture
-- `/tasks/:taskId` for a single task timeline, evidence trace, and playbook
+- `/tasks/:taskId` for a single task timeline, evidence trace, playbook, collaboration state, and strategy actions
 - `/memory` for AMOS overview
 - `/software` for governed automation surfaces
 - `/maintenance` for incidents and daemon posture
 - `/usage` for token and cost monitoring
 - `/settings` for runtime, provider, auth, and OIDC configuration
 - `/doctor` for startup and readiness diagnostics
+
+## 4.5. First Useful Operator Loop
+
+Once the dashboard is open, a good first pass is:
+
+1. open `/doctor` and confirm the runtime is actually ready
+2. open `/settings` and verify provider + auth posture
+3. open `/dashboard` and inspect system health, approvals, and usage
+4. open one `/tasks/:taskId` page and confirm timeline, evidence, collaboration, and strategy state are visible
+5. open `/collaboration` if you plan to use the runtime with more than one person
 
 ## 5. Most Common Startup Failure
 
@@ -126,6 +136,14 @@ ceos --config runtime/config.local.json maintenance-report
 ceos --config runtime/config.local.json software-control-report
 ```
 
+Useful API inspection:
+
+```bash
+curl -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" http://127.0.0.1:8080/v1/reports/system
+curl -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" http://127.0.0.1:8080/v1/tasks/<task-id>/collaboration
+curl -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" "http://127.0.0.1:8080/v1/strategy/overview?scope_key=<task-id>"
+```
+
 ## 8. Maintenance
 
 Run one maintenance pass:
@@ -159,4 +177,6 @@ That report tells you whether:
 ## 10. Read Next
 
 - [Complete User Guide](user-guide.md)
+- [Small-Team Best Practices Runbook](../runbooks/small-team-best-practices.md)
 - [Operator API v1](../api/operator-v1.md)
+- [Operator API v1 User Manual](../api/operator-v1-user-manual.md)

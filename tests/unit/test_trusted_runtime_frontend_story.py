@@ -17,3 +17,7 @@ def test_frontend_console_exposes_trusted_runtime_pages_and_charts() -> None:
     assert 'path="/mcp"' in app_source
     assert "buildTimelineOption" in app_source
     assert "buildUsageTrendOption" in app_source
+    assert 'requestJson(`/ui/tasks/${taskId}/leases`' in app_source
+    assert 'requestJson(`/ui/tasks/${taskId}/branches`' in app_source
+    assert 'requestJson(`/ui/tasks/${taskId}/handoff`' in app_source
+    assert 'requestJson(`/ui/tasks/${taskId}/strategy/candidates`' in app_source

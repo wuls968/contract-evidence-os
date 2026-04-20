@@ -78,6 +78,24 @@ class OperatorAPI(ContractEvidenceAPI):
             raise KeyError(task_id)
         return super().memory_kernel_state(scope_key=task_id)
 
+    def memory_scope_state(self, task_id: str) -> dict[str, Any]:
+        task = self.repository.get_task(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        return super().memory_scope_state(scope_key=task_id)
+
+    def task_collaboration(self, task_id: str) -> dict[str, Any]:
+        task = self.repository.get_task(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        return super().task_collaboration_state(task_id=task_id)
+
+    def strategy_state(self, task_id: str) -> dict[str, Any]:
+        task = self.repository.get_task(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        return super().strategy_state(scope_key=task_id)
+
     def consolidate_memory(self, task_id: str, reason: str) -> dict[str, Any]:
         task = self.repository.get_task(task_id)
         if task is None:

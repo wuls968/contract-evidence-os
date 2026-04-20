@@ -286,6 +286,104 @@ def test_console_exposes_trusted_runtime_views_and_collaboration_state(tmp_path:
     assert collaboration_payload["sessions"]
     assert any(item["task_id"] == task_id for item in collaboration_payload["task_bindings"])
 
+
+def test_console_task_actions_update_collaboration_and_strategy_state(tmp_path: Path) -> None:
+    root, _, task_id = _build_runtime(tmp_path)
+    config_path = root / "config.local.json"
+    env_path = root / ".env.local"
+    config_path.write_text("{}", encoding="utf-8")
+    env_path.write_text("", encoding="utf-8")
+
+    app = create_console_app(
+        storage_root=root,
+        token="secret-token",
+        config_path=config_path,
+        env_path=env_path,
+    )
+    client = TestClient(app)
+    client.post(
+        "/auth/bootstrap-admin",
+        json={
+            "email": "admin@example.com",
+            "password": "very-secret-password",
+            "display_name": "Admin Operator",
+            "provider": {"kind": "deterministic", "base_url": "https://api.openai.com/v1", "default_model": "gpt-4.1-mini", "api_key": ""},
+            "service": {"host": "127.0.0.1", "port": 8080},
+            "observability_enabled": True,
+            "software_control_repo_path": "",
+        },
+    )
+    client.post("/auth/login", json={"email": "admin@example.com", "password": "very-secret-password"})
+
+    collaboration = client.post(
+        f"/ui/tasks/{task_id}/collaboration",
+        json={
+            "owner": "owner@example.com",
+            "reviewer": "reviewer@example.com",
+            "operators": ["owner@example.com", "operator@example.com"],
+            "watchers": ["watcher@example.com"],
+            "approval_assignee": "reviewer@example.com",
+        },
+    )
+    lease = client.post(
+        f"/ui/tasks/{task_id}/leases",
+        json={"actor": "owner@example.com", "lease_kind": "owner", "phase": "verification", "ttl_seconds": 300},
+    )
+    branch = client.post(
+        f"/ui/tasks/{task_id}/branches",
+        json={"actor": "operator@example.com", "branch_kind": "tool-run", "title": "Run governed verification tool"},
+    )
+    handoff = client.post(
+        f"/ui/tasks/{task_id}/handoff",
+        json={
+            "from_actor": "owner@example.com",
+            "to_actor": "operator@example.com",
+            "summary": "Continue the governed verification run.",
+            "branch_id": branch.json()["branch_id"],
+        },
+    )
+    signal = client.post(
+        f"/ui/tasks/{task_id}/strategy/feedback",
+        json={
+            "actor": "reviewer@example.com",
+            "strategy_kind": "tool_selection_policy",
+            "signal_kind": "review_accept",
+            "metrics": {"quality": 1.0},
+            "evidence_refs": [],
+        },
+    )
+    candidate = client.post(
+        f"/ui/tasks/{task_id}/strategy/candidates",
+        json={
+            "actor": "reviewer@example.com",
+            "strategy_kind": "tool_selection_policy",
+            "target_component": "tool.verify",
+            "hypothesis": "Prefer governed verification tools after review success.",
+            "supporting_signal_ids": [signal.json()["signal_id"]],
+        },
+    )
+    promoted = client.post(
+        f"/ui/tasks/{task_id}/strategy/candidates/{candidate.json()['candidate_id']}/promote",
+        json={"actor": "reviewer@example.com", "reason": "Review accepted the proposal."},
+    )
+    cockpit = client.get(f"/ui/tasks/{task_id}")
+
+    assert collaboration.status_code == 200
+    assert lease.status_code == 200
+    assert branch.status_code == 200
+    assert handoff.status_code == 200
+    assert signal.status_code == 200
+    assert candidate.status_code == 200
+    assert promoted.status_code == 200
+    assert cockpit.status_code == 200
+    cockpit_payload = cockpit.json()
+    assert cockpit_payload["collaboration"]["binding"]["owner"] == "owner@example.com"
+    assert cockpit_payload["collaboration"]["active_leases"][0]["phase"] == "verification"
+    assert cockpit_payload["collaboration"]["branches"][0]["branch_kind"] == "tool-run"
+    assert cockpit_payload["collaboration"]["handoffs"][0]["to_actor"] == "operator@example.com"
+    assert cockpit_payload["strategy"]["candidates"][0]["target_component"] == "tool.verify"
+    assert cockpit_payload["strategy"]["promotion_decisions"][0]["candidate_id"] == candidate.json()["candidate_id"]
+
     mcp = client.get("/ui/mcp/overview")
     assert mcp.status_code == 200
     mcp_payload = mcp.json()

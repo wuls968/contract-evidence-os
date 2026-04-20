@@ -74,6 +74,35 @@ Typical use cases include:
 - manage local accounts, sessions, invitations, and OIDC configuration from the console
 - expose and consume governed MCP surfaces without bypassing the trust model
 
+## What A Real Workflow Looks Like
+
+If you are evaluating whether this is practical, the shortest honest answer is:
+
+1. create or resume a task
+2. let the runtime compile the work into an explicit contract
+3. inspect the task cockpit while the runtime gathers evidence, runs tools, and updates memory
+4. assign an owner, reviewer, or watcher when collaboration matters
+5. use approvals and review when a risky or trust-sensitive action appears
+6. generate a handoff summary or task completion summary when work changes hands
+7. inspect usage, maintenance, audit, and benchmark posture before declaring success
+
+That workflow is what makes Contract-Evidence OS feel like an operator runtime instead of a prompt wrapper.
+
+## The Core Objects You Will See Everywhere
+
+The system becomes much easier to understand once you know the core objects.
+
+- **Task**: the main unit of work; every important view, audit event, receipt, and memory scope hangs off a task
+- **Contract**: the compiled expectations, constraints, and review boundaries for the task
+- **Evidence**: source records, spans, claims, and validation reports that explain why the runtime believes something
+- **Memory scopes**: `personal_private`, `task_shared`, `workspace_shared`, and `published_trusted`
+- **Collaboration binding**: who owns a task, who reviews it, who is watching it, and who currently needs to act
+- **Lease / branch / handoff**: the controlled way multiple people coordinate around one task without stepping on each other
+- **Strategy candidate**: a governed proposal to improve memory policy, summarization policy, tool policy, or provider routing
+- **Receipt**: the durable record that a tool call, software action, approval, replay, or runtime step actually happened
+
+Once you understand those objects, the browser console, CLI, and API all feel much more consistent.
+
 ## Human-Friendly Trust Console
 
 The default human surface is the browser console served by `ceos-server`.
@@ -125,6 +154,81 @@ flowchart LR
 ```
 
 In one sentence: Contract-Evidence OS takes work in, turns it into an explicit contract, executes it with evidence and receipts, stores and repairs memory through AMOS, keeps software control inside governed boundaries, and exposes the result through a trusted runtime console.
+
+## Architecture At A Glance
+
+If you are scanning the GitHub homepage and want the shortest accurate systems view, this is the mental model to keep:
+
+```mermaid
+flowchart TB
+    subgraph Humans["Human-facing surfaces"]
+        Browser["Browser trust console"]
+        CLI["CLI and scripts"]
+        API["Operator API v1"]
+    end
+
+    subgraph Transport["Transport and auth"]
+        ASGI["ASGI server and routers"]
+        Auth["Local accounts, sessions, RBAC, OIDC"]
+    end
+
+    subgraph Runtime["Trusted runtime core"]
+        Contract["Contract compilation"]
+        Execution["Execution orchestration"]
+        Review["Approvals, review, benchmark gates"]
+        Audit["Audit ledger and receipts"]
+        Strategy["Strategy and policy control plane"]
+    end
+
+    subgraph State["State and memory"]
+        AMOS["AMOS memory OS"]
+        Scoped["Scoped memory and summaries"]
+        Repo["SQLite and repository facades"]
+    end
+
+    subgraph Tools["Governed external action"]
+        Software["Software control fabric"]
+        MCP["Governed MCP surface"]
+        Providers["Model providers and routing"]
+    end
+
+    Browser --> ASGI
+    CLI --> ASGI
+    API --> ASGI
+    ASGI --> Auth
+    ASGI --> Contract
+    Contract --> Execution
+    Execution --> Review
+    Execution --> Audit
+    Execution --> Strategy
+    Execution --> AMOS
+    AMOS --> Scoped
+    Scoped --> Repo
+    Execution --> Software
+    Execution --> MCP
+    Execution --> Providers
+    Software --> Audit
+    MCP --> Audit
+    Review --> Audit
+    Audit --> Repo
+```
+
+## Feature Comparison At A Glance
+
+The easiest way to see the product boundary is to compare it with the systems teams usually evaluate first.
+
+| Capability | Typical chat agent | Generic agent framework | Automation bot | Contract-Evidence OS |
+| --- | --- | --- | --- | --- |
+| Explicit contracts before execution | Rare | Partial | Rare | Yes |
+| Evidence spans and validation trail | Rare | Partial | Rare | Yes |
+| Append-only audit ledger and receipts | Rare | Partial | Partial | Yes |
+| Long-term memory with purge, rebuild, and repair | Rare | Partial | No | Yes |
+| Team ownership, reviewer, watcher, approval assignee | No | Partial | No | Yes |
+| Leases, branches, and handoff for same-task coordination | No | Rare | No | Yes |
+| Governed desktop/software control | Rare | Partial | Yes, often unguided | Yes, approval-aware |
+| Token and cost monitoring by provider and task | Rare | Partial | No | Yes |
+| Strategy canary, promotion, and rollback surfaces | No | Rare | No | Yes |
+| Browser console, CLI, and HTTP API telling the same story | Rare | Partial | Partial | Yes |
 
 ## Quick Start
 
@@ -180,6 +284,18 @@ Expected first-run behavior:
 - after bootstrap, `/` redirects to `/login`
 - after sign-in, the console opens on `/dashboard`
 
+### Your first 15 minutes
+
+If you want the fastest useful evaluation path, do this after launch:
+
+1. open `/setup` and create the bootstrap admin if the system asks
+2. sign in through `/login`
+3. open `/settings` and confirm provider + OIDC posture
+4. open `/doctor` and confirm provider readiness, audit readiness, and frontend readiness
+5. open `/dashboard` to confirm tasks, approvals, usage, and benchmark posture are visible
+6. open `/collaboration` to confirm users, sessions, and invitations are working
+7. use `ceos --config runtime/config.local.json api-contract` so you know what the stable operator API exposes
+
 ### What gets configured
 
 You need two separate kinds of credentials:
@@ -194,6 +310,44 @@ These are different on purpose:
 - the operator token secures your control plane
 - the API key talks to your model provider
 
+### Minimal API examples
+
+The browser console is the easiest human interface, but the runtime is also meant to be scriptable.
+
+Check the contract:
+
+```bash
+ceos --config runtime/config.local.json api-contract
+```
+
+Inspect the system over HTTP:
+
+```bash
+curl \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  http://127.0.0.1:8080/v1/reports/system
+```
+
+Inspect one task:
+
+```bash
+curl \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  http://127.0.0.1:8080/v1/tasks/<task-id>/memory/kernel
+```
+
+Inspect task collaboration and strategy state:
+
+```bash
+curl \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  http://127.0.0.1:8080/v1/tasks/<task-id>/collaboration
+
+curl \
+  -H "Authorization: Bearer $CEOS_OPERATOR_TOKEN" \
+  "http://127.0.0.1:8080/v1/strategy/overview?scope_key=<task-id>"
+```
+
 ## Documentation
 
 If you want the shortest path:
@@ -203,10 +357,12 @@ If you want the shortest path:
 If you want the complete operational manual:
 
 - [Complete User Guide](docs/manual/user-guide.md)
+- [Small-Team Best Practices Runbook](docs/runbooks/small-team-best-practices.md)
 
 If you want protocol and interface details:
 
 - [Operator API v1](docs/api/operator-v1.md)
+- [Operator API v1 User Manual](docs/api/operator-v1-user-manual.md)
 - [Release 0.9.0](docs/releases/0.9.0.md)
 - [Migration guide](docs/releases/migration-0.9.0.md)
 
@@ -266,6 +422,74 @@ It includes:
 - OIDC-ready provider configuration
 - dashboard, settings, doctor, usage, maintenance, audit, and task cockpit surfaces
 
+## Memory, Collaboration, And Strategy In Plain English
+
+The newest parts of the system matter because they make long-running and multi-person work safer.
+
+### Memory scopes
+
+Scoped memory is how the runtime avoids mixing private scratch state with team-trusted knowledge.
+
+- `personal_private`: individual notes, early summaries, and tentative state
+- `task_shared`: coordination state for one task
+- `workspace_shared`: reusable team memory that still belongs to the shared workspace, not the public trusted layer
+- `published_trusted`: reviewed or benchmark-backed memory safe to treat as the strongest shared layer
+
+### Summary kinds
+
+The runtime uses explicit summaries instead of one generic blob:
+
+- `live_working_summary`
+- `handoff_summary`
+- `task_completion_summary`
+- `workspace_digest`
+
+That makes handoffs and long-running work much easier to operate.
+
+### Collaboration model
+
+The system is designed around task coordination, not free-form simultaneous editing.
+
+For each task, you can have:
+
+- one owner
+- one primary reviewer
+- zero to many operators
+- zero to many watchers
+- one current approval assignee
+
+Then leases, branches, and handoff windows provide the coordination mechanics for parallel work.
+
+### Strategy control plane
+
+The runtime can now record feedback and create strategy candidates for:
+
+- memory policy
+- summarization policy
+- tool selection policy
+- provider routing policy
+
+Those candidates can be evaluated, canaried, and promoted through a governed control plane instead of hidden heuristics.
+
+## Small-Team Usage Pattern
+
+The default shape of the system is now much clearer:
+
+- one self-hosted workspace
+- a browser console as the default human surface
+- CLI and `/v1` as stable operator/automation surfaces
+- explicit task ownership and review
+- scoped memory instead of one flat memory bucket
+- governed strategy evolution instead of opaque runtime drift
+
+If you are a technical lead, the intended adoption path is:
+
+1. start with one admin and one provider
+2. add one reviewer and one operator
+3. use `/collaboration` to make ownership visible
+4. use `/tasks/:taskId` for task-level lease, branch, handoff, and strategy actions
+5. use `/usage`, `/audit`, `/maintenance`, and `/benchmarks` to confirm the runtime stays healthy and trustworthy
+
 ## How It Works
 
 At a high level, the system follows this loop:
@@ -294,6 +518,7 @@ The CLI covers:
 
 - task creation, replay, audit, evidence, and approvals
 - memory kernel, evidence pack, timeline, project state, policy, and maintenance surfaces
+- scoped memory, task collaboration, and strategy state
 - software harness manifests, action receipts, and software-control reporting
 - system, metrics, maintenance, service-health, and doctor diagnostics
 
@@ -305,6 +530,7 @@ It covers:
 
 - runtime and task inspection
 - AMOS memory kernel, timeline, project-state, policy, purge, rebuild, and maintenance routes
+- scoped memory, task collaboration, leases, branches, handoff, and strategy routes
 - software-control manifests, receipts, reports, failure clusters, and recovery hints
 - service reports, metrics history, startup validation, and browser-console-adjacent runtime surfaces
 
@@ -370,11 +596,31 @@ The container defaults to `ceos-server --host 0.0.0.0`. If `CEOS_OPERATOR_TOKEN`
 - The system is small-team and self-hosted first; it is not yet a full enterprise multi-tenant control plane.
 - MCP is integrated as a governed runtime surface, not as an unbounded bypass around contracts, approvals, or audit.
 
+## If You Are Deciding Whether To Adopt It
+
+Use Contract-Evidence OS if you want:
+
+- a browser-first control plane for serious agent work
+- long-term memory with repair, maintenance, and scoped trust levels
+- team-visible task ownership and review
+- governed desktop automation instead of unconstrained automation
+- token/cost visibility and auditability
+- a runtime that can explain what happened after the fact
+
+Do not expect it to be:
+
+- a consumer chat app
+- a hosted SaaS black box
+- a multi-tenant enterprise control plane
+- a no-governance “let the agent click anything” environment
+
 ## Learn More
 
 - [Getting Started](docs/manual/getting-started.md)
 - [Complete User Guide](docs/manual/user-guide.md)
+- [Small-Team Best Practices Runbook](docs/runbooks/small-team-best-practices.md)
 - [Operator API v1](docs/api/operator-v1.md)
+- [Operator API v1 User Manual](docs/api/operator-v1-user-manual.md)
 - [Future extension path](docs/architecture/future-extension-path.md)
 - [Release 0.9.0](docs/releases/0.9.0.md)
 - [Migration guide](docs/releases/migration-0.9.0.md)

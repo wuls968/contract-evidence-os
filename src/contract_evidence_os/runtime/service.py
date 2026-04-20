@@ -27,15 +27,25 @@ from contract_evidence_os.evidence.graph import EvidenceBuilder
 from contract_evidence_os.evidence.models import EvidenceGraph, ValidationReport
 from contract_evidence_os.evidence.models import SourceRecord
 from contract_evidence_os.evolution.engine import EvolutionEngine
+from contract_evidence_os.evolution.models import (
+    StrategyFeedbackSignal,
+    StrategyPromotionDecision,
+    StrategyRollbackDecision,
+)
 from contract_evidence_os.bootstrap import provider_runtime_base_url
 from contract_evidence_os.memory.matrix import MemoryMatrix
 from contract_evidence_os.memory.models import (
+    DecisionMemory,
     MaintenanceDaemonRun,
     MaintenanceIncidentRecommendation,
     MaintenanceResolutionAnalytics,
     MaintenanceWorkerLeaseState,
+    MemoryPromotionDecision,
     MemoryRecord,
+    MemoryScopeRecord,
     MemorySoftwareProcedureRecord,
+    SummaryRecord,
+    ToolUsageMemory,
 )
 from contract_evidence_os.observability.dashboard import build_software_control_report, build_system_metrics_report
 from contract_evidence_os.observability.models import (
@@ -103,6 +113,13 @@ from contract_evidence_os.runtime.queueing import (
     QueuePolicy,
     QueuePriorityPolicy,
     RecoveryReservationPolicy,
+)
+from contract_evidence_os.trusted_runtime.models import (
+    CollaborationEvent,
+    HandoffWindow,
+    TaskBranch,
+    TaskCollaborationBinding,
+    TaskLease,
 )
 from contract_evidence_os.storage.repository import SQLiteRepository
 from contract_evidence_os.tools.governance import ToolGovernanceManager
@@ -2005,6 +2022,535 @@ class RuntimeService:
             "timeline_view": self.memory.timeline_view(scope_key=scope_key).to_dict(),
             "project_state_view": self.memory.project_state_view(scope_key=scope_key).to_dict(),
             "software_procedures": [item.to_dict() for item in self.memory.list_memory_software_procedures(scope_key=scope_key)],
+        }
+
+    def _require_task_record(self, task_id: str) -> dict[str, Any]:
+        task = self.repository.get_task(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        return task
+
+    def record_scoped_memory(
+        self,
+        *,
+        task_id: str,
+        actor: str,
+        owner_user_id: str,
+        audience_scope: str,
+        memory_kind: str,
+        summary: str,
+        content: dict[str, Any],
+        evidence_refs: list[str],
+        privacy_level: str,
+        contradiction_risk: float,
+        retention_policy: str | None = None,
+    ) -> MemoryScopeRecord:
+        self._require_task_record(task_id)
+        now = utc_now()
+        record = MemoryScopeRecord(
+            version="1.0",
+            record_id=f"memory-scope-{uuid4().hex[:10]}",
+            task_id=task_id,
+            scope_key=task_id,
+            memory_kind=memory_kind,
+            summary=summary,
+            content=dict(content),
+            evidence_refs=list(evidence_refs),
+            owner_user_id=owner_user_id,
+            audience_scope=audience_scope,
+            promotion_state="local_only" if audience_scope == "personal_private" else "shared_candidate",
+            trust_state="evidence_bound" if evidence_refs else "draft",
+            review_state="not_required" if audience_scope == "personal_private" else "pending",
+            retention_policy=retention_policy
+            or {
+                "personal_private": "per_user",
+                "task_shared": "per_task",
+                "workspace_shared": "workspace",
+                "published_trusted": "published",
+            }.get(audience_scope, "per_task"),
+            privacy_level=privacy_level,
+            contradiction_risk=contradiction_risk,
+            created_at=now,
+            updated_at=now,
+        )
+        self.repository.save_memory_scope_record(record)
+        if memory_kind == "decision":
+            decision_memory = DecisionMemory(
+                version="1.0",
+                decision_memory_id=f"decision-memory-{record.record_id}",
+                task_id=task_id,
+                scope_key=task_id,
+                owner_user_id=owner_user_id,
+                decision_summary=summary,
+                decision_payload=dict(content),
+                evidence_refs=list(evidence_refs),
+                created_at=now,
+            )
+            self.repository._save_runtime_state_record(  # noqa: SLF001
+                "memory_decision_memory",
+                decision_memory.decision_memory_id,
+                task_id,
+                now.isoformat(),
+                decision_memory,
+            )
+        elif memory_kind == "tool_usage":
+            tool_usage_memory = ToolUsageMemory(
+                version="1.0",
+                tool_usage_memory_id=f"tool-usage-memory-{record.record_id}",
+                task_id=task_id,
+                scope_key=task_id,
+                owner_user_id=owner_user_id,
+                tool_name=str(content.get("tool", "tool")),
+                summary=summary,
+                outcome=str(content.get("outcome", "recorded")),
+                evidence_refs=list(evidence_refs),
+                created_at=now,
+            )
+            self.repository._save_runtime_state_record(  # noqa: SLF001
+                "memory_tool_usage_memory",
+                tool_usage_memory.tool_usage_memory_id,
+                task_id,
+                now.isoformat(),
+                tool_usage_memory,
+            )
+        self._audit_event(
+            task_id=task_id,
+            contract_id=self.repository.get_task(task_id)["contract_id"] or "",
+            event_type="memory_scope_write",
+            actor=actor,
+            why=f"{memory_kind}:{audience_scope}",
+            risk_level="medium" if audience_scope != "personal_private" else "low",
+            result=record.trust_state,
+            evidence_refs=list(evidence_refs),
+        )
+        return record
+
+    def promote_scoped_memory(
+        self,
+        *,
+        record_id: str,
+        actor: str,
+        target_scope: str,
+        reason: str,
+    ) -> MemoryPromotionDecision:
+        record = self.repository.load_memory_scope_record(record_id)
+        if record is None:
+            raise KeyError(record_id)
+        source_scope = record.audience_scope
+        record.audience_scope = target_scope
+        record.promotion_state = "promoted"
+        record.trust_state = "published" if target_scope == "published_trusted" else "shared"
+        record.review_state = "pending" if target_scope in {"workspace_shared", "published_trusted"} else "ready"
+        record.updated_at = utc_now()
+        self.repository.save_memory_scope_record(record)
+        decision = MemoryPromotionDecision(
+            version="1.0",
+            decision_id=f"memory-promotion-decision-{uuid4().hex[:10]}",
+            record_id=record.record_id,
+            task_id=record.task_id,
+            scope_key=record.scope_key,
+            actor=actor,
+            source_scope=source_scope,
+            target_scope=target_scope,
+            decision="promoted",
+            reason=reason,
+            created_at=utc_now(),
+        )
+        self.repository.save_memory_promotion_decision(decision)
+        self._audit_event(
+            task_id=record.task_id,
+            contract_id=self.repository.get_task(record.task_id)["contract_id"] or "",
+            event_type="memory_scope_promotion",
+            actor=actor,
+            why=reason,
+            risk_level="medium",
+            result=target_scope,
+            evidence_refs=list(record.evidence_refs),
+        )
+        return decision
+
+    def generate_scope_summary(
+        self,
+        *,
+        task_id: str,
+        actor: str,
+        summary_kind: str,
+    ) -> SummaryRecord:
+        self._require_task_record(task_id)
+        records = self.repository.list_memory_scope_records(scope_key=task_id)
+        if summary_kind == "live_working_summary":
+            audience_scope = "personal_private"
+        elif summary_kind in {"handoff_summary", "task_completion_summary"}:
+            audience_scope = "task_shared"
+        else:
+            audience_scope = "workspace_shared"
+        selected = [
+            record
+            for record in records
+            if audience_scope == "personal_private" or record.audience_scope != "personal_private"
+        ][:5]
+        fragments = [record.summary for record in selected]
+        if summary_kind == "handoff_summary":
+            fragments.extend(question.question for question in self.open_questions(task_id))
+            fragments.extend(action.title for action in self.next_actions(task_id))
+        summary = SummaryRecord(
+            version="1.0",
+            summary_id=f"summary-{uuid4().hex[:10]}",
+            task_id=task_id,
+            scope_key=task_id,
+            summary_kind=summary_kind,
+            actor=actor,
+            audience_scope=audience_scope,
+            summary_text=" | ".join(fragment for fragment in fragments if fragment) or f"{summary_kind} has no scoped memory content yet.",
+            evidence_refs=[ref for record in selected for ref in record.evidence_refs][:12],
+            source_record_ids=[record.record_id for record in selected],
+            trust_state="needs_review" if audience_scope == "workspace_shared" else "evidence_bound",
+            review_state="pending" if audience_scope in {"workspace_shared", "published_trusted"} else "not_required",
+            created_at=utc_now(),
+        )
+        self.repository.save_summary_record(summary)
+        self._audit_event(
+            task_id=task_id,
+            contract_id=self.repository.get_task(task_id)["contract_id"] or "",
+            event_type="memory_scope_summary",
+            actor=actor,
+            why=summary_kind,
+            risk_level="medium" if audience_scope != "personal_private" else "low",
+            result=summary.review_state,
+            evidence_refs=list(summary.evidence_refs),
+        )
+        return summary
+
+    def memory_scope_state(self, *, scope_key: str) -> dict[str, object]:
+        records = self.repository.list_memory_scope_records(scope_key=scope_key)
+        summaries = self.repository.list_summary_records(scope_key=scope_key)
+        promotions = self.repository.list_memory_promotion_decisions(scope_key=scope_key)
+        scope_counts = {
+            scope_name: sum(1 for record in records if record.audience_scope == scope_name)
+            for scope_name in ("personal_private", "task_shared", "workspace_shared", "published_trusted")
+        }
+        return {
+            "task_id": scope_key,
+            "records": [item.to_dict() for item in records],
+            "summaries": [item.to_dict() for item in summaries],
+            "promotion_decisions": [item.to_dict() for item in promotions],
+            "scope_counts": scope_counts,
+        }
+
+    def configure_task_collaboration(
+        self,
+        *,
+        task_id: str,
+        owner: str,
+        reviewer: str,
+        operators: list[str],
+        watchers: list[str],
+        approval_assignee: str,
+    ) -> TaskCollaborationBinding:
+        self._require_task_record(task_id)
+        existing = self.repository.load_task_collaboration_binding(task_id)
+        binding = TaskCollaborationBinding(
+            version="1.0",
+            binding_id=(existing.binding_id if existing is not None else f"task-collaboration-{task_id}"),
+            task_id=task_id,
+            owner=owner,
+            reviewer=reviewer,
+            operators=list(dict.fromkeys(operators)),
+            watchers=list(dict.fromkeys(watchers)),
+            approval_assignee=approval_assignee,
+            blocked_by="" if existing is None else existing.blocked_by,
+            waiting_for="" if existing is None else existing.waiting_for,
+            recent_activity=[] if existing is None else list(existing.recent_activity),
+            updated_at=utc_now(),
+        )
+        binding.recent_activity = [*binding.recent_activity[-4:], f"Collaboration updated by {owner}"]
+        self.repository.save_task_collaboration_binding(binding)
+        self._record_collaboration_event(task_id=task_id, actor=owner, event_type="ownership_updated", summary=f"Owner {owner}, reviewer {reviewer}.")
+        return binding
+
+    def _record_collaboration_event(self, *, task_id: str, actor: str, event_type: str, summary: str, related_ref: str = "") -> CollaborationEvent:
+        event = CollaborationEvent(
+            version="1.0",
+            event_id=f"collaboration-event-{uuid4().hex[:10]}",
+            task_id=task_id,
+            actor=actor,
+            event_type=event_type,
+            summary=summary,
+            related_ref=related_ref,
+        )
+        self.repository.save_collaboration_event(event)
+        return event
+
+    def acquire_task_lease(
+        self,
+        *,
+        task_id: str,
+        actor: str,
+        lease_kind: str,
+        phase: str,
+        ttl_seconds: int = 900,
+    ) -> TaskLease:
+        self._require_task_record(task_id)
+        now = utc_now()
+        active = [
+            lease
+            for lease in self.repository.list_task_leases(task_id=task_id)
+            if lease.status == "active" and (lease.expires_at is None or lease.expires_at > now)
+        ]
+        for lease in active:
+            if lease.lease_kind == lease_kind and lease.phase == phase:
+                if lease.actor == actor:
+                    return lease
+                if lease_kind == "owner":
+                    raise ValueError(f"task {task_id} already has an active owner lease for {phase}")
+        lease = TaskLease(
+            version="1.0",
+            lease_id=f"task-lease-{uuid4().hex[:10]}",
+            task_id=task_id,
+            actor=actor,
+            lease_kind=lease_kind,
+            phase=phase,
+            status="active",
+            expires_at=now + timedelta(seconds=ttl_seconds),
+        )
+        self.repository.save_task_lease(lease)
+        self._record_collaboration_event(task_id=task_id, actor=actor, event_type="lease_acquired", summary=f"{actor} acquired {lease_kind} lease for {phase}.", related_ref=lease.lease_id)
+        return lease
+
+    def create_task_branch(
+        self,
+        *,
+        task_id: str,
+        actor: str,
+        branch_kind: str,
+        title: str,
+        parent_branch_id: str = "",
+    ) -> TaskBranch:
+        self._require_task_record(task_id)
+        branch = TaskBranch(
+            version="1.0",
+            branch_id=f"task-branch-{uuid4().hex[:10]}",
+            task_id=task_id,
+            actor=actor,
+            branch_kind=branch_kind,
+            title=title,
+            status="active",
+            parent_branch_id=parent_branch_id,
+        )
+        self.repository.save_task_branch(branch)
+        self._record_collaboration_event(task_id=task_id, actor=actor, event_type="branch_created", summary=title, related_ref=branch.branch_id)
+        return branch
+
+    def open_handoff_window(
+        self,
+        *,
+        task_id: str,
+        from_actor: str,
+        to_actor: str,
+        summary: str,
+        branch_id: str = "",
+    ) -> HandoffWindow:
+        self._require_task_record(task_id)
+        handoff = HandoffWindow(
+            version="1.0",
+            handoff_id=f"handoff-{uuid4().hex[:10]}",
+            task_id=task_id,
+            from_actor=from_actor,
+            to_actor=to_actor,
+            summary=summary,
+            status="open",
+            branch_id=branch_id,
+        )
+        self.repository.save_handoff_window(handoff)
+        self._record_collaboration_event(task_id=task_id, actor=from_actor, event_type="handoff_opened", summary=f"Handoff opened to {to_actor}.", related_ref=handoff.handoff_id)
+        return handoff
+
+    def task_collaboration_state(self, *, task_id: str) -> dict[str, object]:
+        self._require_task_record(task_id)
+        binding = self.repository.load_task_collaboration_binding(task_id)
+        active_leases = [
+            lease.to_dict()
+            for lease in self.repository.list_task_leases(task_id=task_id)
+            if lease.status == "active" and (lease.expires_at is None or lease.expires_at > utc_now())
+        ]
+        branches = [item.to_dict() for item in self.repository.list_task_branches(task_id=task_id)]
+        handoffs = [item.to_dict() for item in self.repository.list_handoff_windows(task_id=task_id)]
+        events = [item.to_dict() for item in self.repository.list_collaboration_events(task_id=task_id)][-12:]
+        return {
+            "task_id": task_id,
+            "binding": None if binding is None else binding.to_dict(),
+            "active_leases": active_leases,
+            "branches": branches,
+            "handoffs": handoffs,
+            "events": events,
+        }
+
+    def record_strategy_feedback(
+        self,
+        *,
+        scope_key: str,
+        actor: str,
+        strategy_kind: str,
+        signal_kind: str,
+        metrics: dict[str, object],
+        evidence_refs: list[str],
+    ) -> StrategyFeedbackSignal:
+        signal = StrategyFeedbackSignal(
+            version="1.0",
+            signal_id=f"strategy-signal-{uuid4().hex[:10]}",
+            scope_key=scope_key,
+            actor=actor,
+            strategy_kind=strategy_kind,
+            signal_kind=signal_kind,
+            metrics=dict(metrics),
+            evidence_refs=list(evidence_refs),
+            created_at=utc_now(),
+        )
+        self.repository.save_strategy_feedback_signal(signal)
+        return signal
+
+    def propose_strategy_candidate(
+        self,
+        *,
+        scope_key: str,
+        actor: str,
+        strategy_kind: str,
+        target_component: str,
+        hypothesis: str,
+        supporting_signal_ids: list[str],
+    ):
+        candidate = self.evolution.propose_candidate(
+            candidate_type=strategy_kind,
+            source_traces=list(supporting_signal_ids),
+            target_component=target_component,
+            hypothesis=hypothesis,
+        )
+        self._record_collaboration_event(
+            task_id=scope_key,
+            actor=actor,
+            event_type="strategy_candidate_created",
+            summary=f"{strategy_kind} candidate proposed for {target_component}.",
+            related_ref=candidate.candidate_id,
+        )
+        return candidate
+
+    def evaluate_strategy_candidate(
+        self,
+        candidate_id: str,
+        regression_failures: int | None = None,
+        gain: float | None = None,
+        report=None,
+    ):
+        return self.evolution.evaluate_candidate(
+            candidate_id,
+            regression_failures=regression_failures,
+            gain=gain,
+            report=report,
+        )
+
+    def run_strategy_canary(
+        self,
+        candidate_id: str,
+        *,
+        actor: str,
+        success_rate: float,
+        anomaly_count: int,
+        scope: str,
+    ):
+        run = self.evolution.run_canary(candidate_id, success_rate=success_rate, anomaly_count=anomaly_count)
+        self._record_collaboration_event(
+            task_id=scope,
+            actor=actor,
+            event_type="strategy_canary_completed",
+            summary=f"Canary finished with status {run.status}.",
+            related_ref=run.run_id,
+        )
+        return run
+
+    def _strategy_scope_key(self, candidate_id: str) -> str:
+        candidate = self.evolution.candidates.get(candidate_id)
+        if candidate is None:
+            candidate = self.repository.load_evolution_candidate(candidate_id)
+            self.evolution.candidates[candidate_id] = candidate
+        feedback_ids = list(candidate.source_traces)
+        feedback_by_scope = {}
+        for signal in self.repository.list_strategy_feedback_signals():
+            if signal.signal_id in feedback_ids:
+                feedback_by_scope.setdefault(signal.scope_key, 0)
+                feedback_by_scope[signal.scope_key] += 1
+        if feedback_by_scope:
+            return max(feedback_by_scope, key=feedback_by_scope.get)
+        return "global"
+
+    def promote_strategy_candidate(
+        self,
+        candidate_id: str,
+        *,
+        actor: str,
+        reason: str,
+    ) -> StrategyPromotionDecision:
+        candidate = self.evolution.promote_candidate(candidate_id)
+        scope_key = self._strategy_scope_key(candidate_id)
+        decision = StrategyPromotionDecision(
+            version="1.0",
+            decision_id=f"strategy-promotion-{uuid4().hex[:10]}",
+            candidate_id=candidate_id,
+            scope_key=scope_key,
+            actor=actor,
+            decision="promoted" if candidate.promotion_result == "promoted" else "rolled_back",
+            reason=reason,
+            created_at=utc_now(),
+        )
+        self.repository.save_strategy_promotion_decision(decision)
+        return decision
+
+    def rollback_strategy_candidate(
+        self,
+        candidate_id: str,
+        *,
+        actor: str,
+        reason: str,
+    ) -> StrategyRollbackDecision:
+        self.evolution.rollback_candidate(candidate_id)
+        scope_key = self._strategy_scope_key(candidate_id)
+        decision = StrategyRollbackDecision(
+            version="1.0",
+            decision_id=f"strategy-rollback-{uuid4().hex[:10]}",
+            candidate_id=candidate_id,
+            scope_key=scope_key,
+            actor=actor,
+            reason=reason,
+            created_at=utc_now(),
+        )
+        self.repository.save_strategy_rollback_decision(decision)
+        return decision
+
+    def strategy_state(self, *, scope_key: str) -> dict[str, object]:
+        feedback = self.repository.list_strategy_feedback_signals(scope_key=scope_key)
+        signal_ids = {item.signal_id for item in feedback}
+        candidates = [
+            candidate
+            for candidate in self.repository.list_evolution_candidates()
+            if signal_ids.intersection(candidate.source_traces)
+        ]
+        evaluations = [
+            run.to_dict()
+            for candidate in candidates
+            for run in self.repository.list_evaluation_runs(candidate.candidate_id)
+        ]
+        canaries = [
+            run.to_dict()
+            for candidate in candidates
+            for run in self.repository.list_canary_runs(candidate.candidate_id)
+        ]
+        return {
+            "scope_key": scope_key,
+            "feedback_signals": [item.to_dict() for item in feedback],
+            "candidates": [item.to_dict() for item in candidates],
+            "evaluations": evaluations,
+            "canaries": canaries,
+            "promotion_decisions": [item.to_dict() for item in self.repository.list_strategy_promotion_decisions(scope_key=scope_key)],
+            "rollback_decisions": [item.to_dict() for item in self.repository.list_strategy_rollback_decisions(scope_key=scope_key)],
         }
 
     def raw_episodes(self, *, task_id: str | None = None, scope_key: str | None = None):
