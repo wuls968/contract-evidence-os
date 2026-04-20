@@ -37,7 +37,11 @@ def main(argv: list[str] | None = None) -> int:
         token_env = str(config.service.get("token_env", "CEOS_OPERATOR_TOKEN"))
         token = os.environ.get(token_env, "")
     if not token:
-        raise SystemExit("operator token is required via --token or configured environment variable")
+        raise SystemExit(
+            "operator token is required via --token or "
+            f"{config.service.get('token_env', 'CEOS_OPERATOR_TOKEN')}. "
+            "If you used ./scripts/install.sh --init-config, run: source runtime/.env.local"
+        )
     service = RemoteOperatorService(
         storage_root=Path(config.storage_root),
         token=token,
@@ -54,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         shared_state_backend_url=str(args.shared_state_url or config.shared_state_backend.get("url", "")) or None,
         trust_mode=str(args.trust_mode or config.trust.get("mode", "standard")),
         cli_anything_repo_path=str(config.software_control.get("repo_path", "")) or None,
+        provider_settings=dict(config.provider),
     )
     service.serve_forever()
     return 0

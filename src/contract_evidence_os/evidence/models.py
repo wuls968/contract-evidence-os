@@ -27,6 +27,25 @@ class SourceRecord(SchemaModel):
 
 
 @dataclass
+class EvidenceSpan(SchemaModel):
+    """Precise source span used for traceable claims and reviews."""
+
+    version: str
+    span_id: str
+    source_id: str
+    locator: str
+    label: str
+    start_offset: int
+    end_offset: int
+    text: str
+    created_at: datetime
+    metadata: dict[str, str | int | float | bool | None]
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
 class EvidenceNode(SchemaModel):
     """Atomic evidence item in the graph."""
 
@@ -79,6 +98,7 @@ class ClaimRecord(SchemaModel):
     claim_type: str
     evidence_refs: list[str]
     status: str
+    evidence_span_refs: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.validate()
@@ -97,6 +117,7 @@ class ValidationReport(SchemaModel):
     findings: list[str]
     contradictions: list[str]
     evidence_refs: list[str]
+    evidence_span_refs: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.validate()

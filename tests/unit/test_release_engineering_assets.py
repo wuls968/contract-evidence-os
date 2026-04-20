@@ -12,6 +12,7 @@ def test_release_engineering_assets_cover_build_and_container_defaults() -> None
 
     assert "build>=" in pyproject
     assert "pytest-cov>=" in pyproject
+    assert "httpx>=" in pyproject
     assert "python -m build --sdist --wheel" in ci
     assert "pip install dist/*.whl" in ci
     assert entrypoint.exists()

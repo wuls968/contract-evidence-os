@@ -21,8 +21,17 @@ class ModelRoute:
     retry_budget: int = 2
 
 
+@dataclass
 class ModelRouter:
     """Route workloads to lightweight or deep profiles."""
+
+    default_models: dict[str, str] = field(
+        default_factory=lambda: {
+            "economy": "deterministic-economy",
+            "quality": "deterministic-quality",
+            "default": "deterministic-default",
+        }
+    )
 
     def route(
         self,
@@ -40,7 +49,7 @@ class ModelRouter:
                     "economy-extractor",
                     "low",
                     "economy strategy favors cheaper extraction",
-                    model_name="deterministic-economy",
+                    model_name=self.default_models["economy"],
                     strategy_name="economy",
                     retry_budget=2,
                 )
@@ -51,7 +60,7 @@ class ModelRouter:
                 "economy-verifier",
                 "medium",
                 "economy strategy uses lighter verification",
-                model_name="deterministic-economy",
+                model_name=self.default_models["economy"],
                 strategy_name="economy",
                 retry_budget=2,
             )
@@ -64,7 +73,7 @@ class ModelRouter:
                     "quality-extractor",
                     "high",
                     "quality strategy maximizes evidence capture",
-                    model_name="deterministic-quality",
+                    model_name=self.default_models["quality"],
                     strategy_name="quality",
                     retry_budget=2,
                 )
@@ -75,14 +84,46 @@ class ModelRouter:
                 "quality-verifier",
                 "high",
                 "quality strategy emphasizes stronger verification",
-                model_name="deterministic-quality",
+                model_name=self.default_models["quality"],
                 strategy_name="quality",
                 retry_budget=2,
             )
         if role == "Researcher" and workload == "extraction" and risk_level == "low":
-            return ModelRoute(role, workload, risk_level, "fast-extractor", "low", "cheap extraction path")
+            return ModelRoute(
+                role,
+                workload,
+                risk_level,
+                "fast-extractor",
+                "low",
+                "cheap extraction path",
+                model_name=self.default_models["default"],
+            )
         if role in {"Verifier", "Critic"} or risk_level == "high":
-            return ModelRoute(role, workload, risk_level, "deep-verifier", "high", "risk-sensitive verification path")
+            return ModelRoute(
+                role,
+                workload,
+                risk_level,
+                "deep-verifier",
+                "high",
+                "risk-sensitive verification path",
+                model_name=self.default_models["quality"],
+            )
         if role == "Builder":
-            return ModelRoute(role, workload, risk_level, "balanced-builder", "medium", "artifact construction path")
-        return ModelRoute(role, workload, risk_level, "balanced-generalist", "medium", "default routing path")
+            return ModelRoute(
+                role,
+                workload,
+                risk_level,
+                "balanced-builder",
+                "medium",
+                "artifact construction path",
+                model_name=self.default_models["default"],
+            )
+        return ModelRoute(
+            role,
+            workload,
+            risk_level,
+            "balanced-generalist",
+            "medium",
+            "default routing path",
+            model_name=self.default_models["default"],
+        )

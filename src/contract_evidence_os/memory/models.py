@@ -1337,6 +1337,165 @@ class MaintenanceResolutionAnalytics(SchemaModel):
 
 
 @dataclass
+class MemoryScopeRecord(SchemaModel):
+    """Scoped memory record for personal, task, workspace, or published layers."""
+
+    version: str
+    record_id: str
+    task_id: str
+    scope_key: str
+    memory_kind: str
+    summary: str
+    content: dict[str, Any]
+    evidence_refs: list[str]
+    owner_user_id: str
+    audience_scope: str
+    promotion_state: str
+    trust_state: str
+    review_state: str
+    retention_policy: str
+    privacy_level: str
+    contradiction_risk: float
+    created_at: datetime
+    updated_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class MemoryPromotionDecision(SchemaModel):
+    """Promotion or demotion decision for a scoped memory record."""
+
+    version: str
+    decision_id: str
+    record_id: str
+    task_id: str
+    scope_key: str
+    actor: str
+    source_scope: str
+    target_scope: str
+    decision: str
+    reason: str
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class SummaryRecord(SchemaModel):
+    """Evidence-bound summary generated for one task or workspace scope."""
+
+    version: str
+    summary_id: str
+    task_id: str
+    scope_key: str
+    summary_kind: str
+    actor: str
+    audience_scope: str
+    summary_text: str
+    evidence_refs: list[str]
+    source_record_ids: list[str]
+    trust_state: str
+    review_state: str
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class TaskCollaborationMemory(SchemaModel):
+    """Shared collaboration-oriented memory for task coordination."""
+
+    version: str
+    collaboration_memory_id: str
+    task_id: str
+    scope_key: str
+    owner_user_id: str
+    summary: str
+    evidence_refs: list[str]
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class DecisionMemory(SchemaModel):
+    """Decision memory promoted from private or task-shared work."""
+
+    version: str
+    decision_memory_id: str
+    task_id: str
+    scope_key: str
+    owner_user_id: str
+    decision_summary: str
+    decision_payload: dict[str, Any]
+    evidence_refs: list[str]
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class ReviewMemory(SchemaModel):
+    """Review outcome remembered for future task coordination."""
+
+    version: str
+    review_memory_id: str
+    task_id: str
+    scope_key: str
+    reviewer: str
+    summary: str
+    review_state: str
+    evidence_refs: list[str]
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class WorkaroundMemory(SchemaModel):
+    """Known workaround or remediation captured as memory."""
+
+    version: str
+    workaround_memory_id: str
+    task_id: str
+    scope_key: str
+    owner_user_id: str
+    summary: str
+    workaround_steps: list[str]
+    evidence_refs: list[str]
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
+class ToolUsageMemory(SchemaModel):
+    """Memory of a successful or problematic tool usage pattern."""
+
+    version: str
+    tool_usage_memory_id: str
+    task_id: str
+    scope_key: str
+    owner_user_id: str
+    tool_name: str
+    summary: str
+    outcome: str
+    evidence_refs: list[str]
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+
+@dataclass
 class SkillCapsule(SchemaModel):
     """Promotable procedural unit distilled from execution traces."""
 

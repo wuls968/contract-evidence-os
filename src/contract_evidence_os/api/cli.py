@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from contract_evidence_os.api.operator import OperatorAPI
+from contract_evidence_os.console.service import ConsoleService
 from contract_evidence_os.config import RuntimeConfig
 
 
@@ -112,6 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
     maintenance_report.add_argument("--task-id")
 
     service_health = subparsers.add_parser("service-health")
+    doctor = subparsers.add_parser("doctor")
+    doctor.add_argument("--env-path")
 
     api_contract = subparsers.add_parser("api-contract")
 
@@ -162,7 +165,9 @@ def main(argv: list[str] | None = None) -> int:
         config_path=None if args.config is None else Path(args.config),
         overrides={} if args.storage_root is None else {"storage_root": args.storage_root},
     )
-    api = OperatorAPI(storage_root=Path(config.storage_root))
+    config_path = Path(args.config) if args.config is not None else Path(config.storage_root) / "config.local.json"
+    env_path = Path(getattr(args, "env_path", "") or (Path(config.storage_root) / ".env.local"))
+    api = OperatorAPI(storage_root=Path(config.storage_root), **config.runtime_kwargs())
 
     if args.command == "create-task":
         preferences = dict(item.split("=", 1) for item in args.preference)
@@ -209,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
         payload = api.maintenance_report(task_id=args.task_id)
     elif args.command == "service-health":
         payload = api.service_health()
+    elif args.command == "doctor":
+        payload = ConsoleService(api=api, config_path=config_path, env_path=env_path).doctor_report()
     elif args.command == "api-contract":
         payload = api.api_contract()
     elif args.command == "memory-kernel-state":

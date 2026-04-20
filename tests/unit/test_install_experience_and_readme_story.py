@@ -19,6 +19,13 @@ def test_install_script_and_readme_present_a_clear_local_first_story() -> None:
     assert "--env-path" in install_text
     assert "config.local.json" in install_text
     assert ".env.local" in install_text
+    assert "ceos_operator_token" in install_text.lower()
+    assert "ceos_api_key" in install_text.lower()
+    assert "ceos_api_base_url" in install_text.lower()
+    assert "read -r -p" in install_text
+    assert "verify" in install_text.lower()
+    assert "npm" in install_text.lower()
+    assert "frontend" in install_text.lower()
     assert "--remove-venv" in uninstall_text
     assert "installed by contract-evidence os install.sh" in uninstall_text.lower()
 
@@ -33,5 +40,23 @@ def test_install_script_and_readme_present_a_clear_local_first_story() -> None:
     assert "```mermaid" in readme
     assert "see the system in one view" in readme
     assert "--init-config" in readme
+    assert "dashboard" in readme
+    assert "/setup" in readme
+    assert "/login" in readme
+    assert "/usage" in readme
     assert "config.local.json" in readme
     assert ".env.local" in readme
+    assert "source runtime/.env.local" in readme
+    assert "ceos_operator_token" in readme
+    assert "ceos_api_key" in readme
+    assert "memory scopes" in readme
+    assert "strategy control plane" in readme
+    assert "leases, branches, and handoff" in readme
+    assert "architecture at a glance" in readme
+    assert "feature comparison at a glance" in readme
+    assert "small-team-best-practices.md" in readme
+    assert "operator-v1-user-manual.md" in readme
+    assert "getting-started.md" in readme
+    assert "user-guide.md" in readme
+    assert "trusted ai runtime" in readme
+    assert "small teams" in readme or "small-team" in readme

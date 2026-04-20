@@ -250,6 +250,8 @@ from contract_evidence_os.runtime.trust import (
     TrustReplayRecord,
 )
 from contract_evidence_os.storage.migration_hooks import migrate_payload
+from contract_evidence_os.storage.control_plane_store import SQLiteControlPlaneStore
+from contract_evidence_os.storage.memory_store import SQLiteMemoryStore
 from contract_evidence_os.storage.migrations import MigrationRunner
 from contract_evidence_os.tools.governance import ToolScorecard
 from contract_evidence_os.tools.anything_cli.models import (
@@ -280,6 +282,17 @@ class SQLiteRepository:
         self.db_path = Path(db_path)
         self.runner = MigrationRunner(self.db_path)
         self.runner.apply_all()
+        self.memory_store = SQLiteMemoryStore(self)
+        self.control_plane_store = SQLiteControlPlaneStore(self)
+
+    def __getattr__(self, name: str) -> Any:
+        memory_store = object.__getattribute__(self, "memory_store")
+        if hasattr(type(memory_store), name) or name.startswith(memory_store._OWNER_MEMORY_PREFIXES):  # noqa: SLF001
+            return getattr(memory_store, name)
+        control_plane_store = object.__getattribute__(self, "control_plane_store")
+        if hasattr(type(control_plane_store), name):
+            return getattr(control_plane_store, name)
+        raise AttributeError(f"{type(self).__name__!s} has no attribute {name!r}")
 
     def dumps(self, payload: dict[str, Any]) -> str:
         return json.dumps(payload, ensure_ascii=True, sort_keys=True)
@@ -533,6 +546,13 @@ class SQLiteRepository:
                 "payload_json": self.dumps(source.to_dict()),
             },
         )
+
+    def list_source_records(self, task_id: str) -> list[SourceRecord]:
+        rows = self._fetchall(
+            "SELECT * FROM source_records WHERE task_id = ? ORDER BY retrieved_at ASC",
+            (task_id,),
+        )
+        return [self._model_from_row("source_records", row, SourceRecord) for row in rows]
 
     def save_evidence_graph(
         self,
@@ -956,87 +976,6 @@ class SQLiteRepository:
             (task_id,),
         )
         return [self._model_from_row("incidents", row, IncidentReport) for row in rows]
-
-    def save_memory_record(self, record: MemoryRecord) -> None:
-        self._insert_or_replace(
-            "memory_records",
-            {
-                "memory_id": record.memory_id,
-                "memory_type": record.memory_type,
-                "state": record.state,
-                "updated_at": record.updated_at.isoformat(),
-                "record_version": record.version,
-                "payload_json": self.dumps(record.to_dict()),
-            },
-        )
-
-    def list_memory_records(self, memory_type: str | None = None, state: str | None = None) -> list[MemoryRecord]:
-        clauses = []
-        params: list[Any] = []
-        if memory_type:
-            clauses.append("memory_type = ?")
-            params.append(memory_type)
-        if state:
-            clauses.append("state = ?")
-            params.append(state)
-        query = "SELECT * FROM memory_records"
-        if clauses:
-            query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY updated_at ASC"
-        rows = self._fetchall(query, tuple(params))
-        return [self._model_from_row("memory_records", row, MemoryRecord) for row in rows]
-
-    def save_memory_promotion(self, promotion: MemoryPromotionRecord) -> None:
-        self._insert_or_replace(
-            "memory_promotions",
-            {
-                "promotion_id": promotion.promotion_id,
-                "memory_id": promotion.memory_id,
-                "new_state": promotion.new_state,
-                "promoted_at": promotion.promoted_at.isoformat(),
-                "record_version": promotion.version,
-                "payload_json": self.dumps(promotion.to_dict()),
-            },
-        )
-
-    def save_raw_episode(self, record: RawEpisodeRecord) -> None:
-        self._save_runtime_state_record(
-            "memory_raw_episode",
-            record.episode_id,
-            record.scope_key,
-            record.created_at.isoformat(),
-            record,
-        )
-
-    def list_raw_episodes(self, task_id: str | None = None, scope_key: str | None = None) -> list[RawEpisodeRecord]:
-        records = self._list_runtime_state_records("memory_raw_episode", RawEpisodeRecord, scope_key=scope_key)
-        if task_id is not None:
-            records = [record for record in records if record.task_id == task_id]
-        return records
-
-    def save_working_memory_snapshot(self, snapshot: WorkingMemorySnapshot) -> None:
-        self._save_runtime_state_record(
-            "memory_working_snapshot",
-            snapshot.snapshot_id,
-            snapshot.scope_key,
-            snapshot.captured_at.isoformat(),
-            snapshot,
-        )
-
-    def list_working_memory_snapshots(
-        self,
-        *,
-        task_id: str | None = None,
-        scope_key: str | None = None,
-    ) -> list[WorkingMemorySnapshot]:
-        records = self._list_runtime_state_records("memory_working_snapshot", WorkingMemorySnapshot, scope_key=scope_key)
-        if task_id is not None:
-            records = [record for record in records if record.task_id == task_id]
-        return records
-
-    def latest_working_memory_snapshot(self, task_id: str) -> WorkingMemorySnapshot | None:
-        records = self.list_working_memory_snapshots(task_id=task_id)
-        return None if not records else records[0]
 
     def save_memory_write_candidate(self, candidate: MemoryWriteCandidate) -> None:
         self._save_runtime_state_record(
